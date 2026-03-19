@@ -1,0 +1,6 @@
+[submodule "Plugins/MobiusUISubsystem"]
+	path = Plugins/MobiusUISubsystem
+	url = https://github.com/mobiuslite/MobiusUISubsystem.git
+[submodule "Plugins/BoxelWorldGeneration"]
+	path = Plugins/BoxelWorldGeneration
+	url = https://github.com/mobiuslite/BoxelWorldGeneration.git
