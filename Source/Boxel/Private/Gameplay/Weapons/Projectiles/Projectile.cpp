@@ -50,7 +50,7 @@ void AProjectile::AUTH_ProjectileStop_Implementation(const FHitResult& ImpactRes
 bool AProjectile::IsClientPredictedProjectile() const
 {
 	const bool bHasAuthority = HasAuthority();
-	const ENetRole ThisRole = GetOwner()->GetLocalRole();
+	const ENetRole ThisRole = GetInstigator()->GetLocalRole();
 	
 	return bHasAuthority && ThisRole == ROLE_AutonomousProxy;
 }
@@ -58,7 +58,7 @@ bool AProjectile::IsClientPredictedProjectile() const
 bool AProjectile::IsServerDuplicateProjectile() const
 {
 	const bool bHasAuthority = HasAuthority();
-	const bool bIsLocallyControlled = Cast<APawn>(GetOwner())->IsLocallyControlled();
+	const bool bIsLocallyControlled = Cast<APawn>(GetInstigator())->IsLocallyControlled();
 	
 	return !bHasAuthority && bIsLocallyControlled;
 }

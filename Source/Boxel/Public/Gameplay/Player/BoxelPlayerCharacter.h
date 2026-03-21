@@ -5,6 +5,8 @@
 #include "MobiusAbilitySystem/Player/MACharacter.h"
 #include "BoxelPlayerCharacter.generated.h"
 
+class USphereComponent;
+class AGunBase;
 class AProjectile;
 struct FInputActionValue;
 class UInputAction;
@@ -30,10 +32,22 @@ protected:
 	void OnTriggerPressed();
 	UFUNCTION(BlueprintNativeEvent)
 	void OnTriggerReleased();
-	UPROPERTY(BlueprintReadOnly)
-	bool bTriggerDown;
 	
-	float FireTimer;
+	UFUNCTION()
+	void OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
+	UFUNCTION()
+	void PickUpGun(AGunBase* Gun);
+	UFUNCTION()
+	void DropHeldGun();
+	
+	UFUNCTION()
+	void OnRep_HeldGun(AGunBase* LastGun);
+	
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HeldGun)
+	AGunBase* HeldGun;
+	
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<AGunBase> StartingGunClass;
 	
 	//Input
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
@@ -58,19 +72,11 @@ protected:
 	UFUNCTION(BlueprintNativeEvent)
 	void OnLandedEX(const float TimeInAir, const FHitResult& Hit);
 	
-	UPROPERTY(EditAnywhere)
-	TSubclassOf<AProjectile> ProjectileClass;
-	
 	UFUNCTION(BlueprintNativeEvent)
 	void OnRep_Talking();
 	UPROPERTY(ReplicatedUsing=OnRep_Talking, BlueprintReadOnly)
 	bool bTalking;
 private:
-	
-	void FireProjectile(const FVector& Location, const FRotator& Rotation);
-	
-	UFUNCTION(Server, Reliable)
-	void Server_FireProjectile(const FVector& Location, const FRotator& Rotation);
 	
 	void MoveInput(const FInputActionValue& Value);
 	void LookInput(const FInputActionValue& Value);

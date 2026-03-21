@@ -9,6 +9,7 @@
 #include "Gameplay/WorldGen/WorldGenActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Utility/MobiusUtils.h"
 
 void ASpleefGameMode::BeginPlay()
 {
@@ -35,9 +36,9 @@ void ASpleefGameMode::Tick(float DeltaSeconds)
 	}
 }
 
-void ASpleefGameMode::StartSpleefGame()
+void ASpleefGameMode::StartGame()
 {
-	CurrentAlivePlayers.Empty();
+	Super::StartGame();
 	
 	TArray<AActor*> WorldGenActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorldGenActor::StaticClass(), WorldGenActors);
@@ -62,28 +63,14 @@ void ASpleefGameMode::StartSpleefGame()
 	
 	if (!HighestWorldGen) return;
 	
-	TArray<AActor*> PlayerActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ABoxelPlayerCharacter::StaticClass(), PlayerActors);
-
-	if (IsValid(BotClass))
-	{
-		for (int i = 0; i < NumBots; ++i)
-		{
-			FActorSpawnParameters Params;
-			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-			APawn* NewBot = GetWorld()->SpawnActor<APawn>(BotClass, Params);
-			PlayerActors.Add(NewBot);	
-		}
-	}
-	
-	if (PlayerActors.Num() == 0) return;
+	if (CurrentAlivePlayers.Num() == 0) return;
 	
 	const FVector CenterLocation = HighestWorldGen->GetWorldCenter();
-	const float AnglePerPlayer = 360.0f / PlayerActors.Num();
+	const float AnglePerPlayer = 360.0f / CurrentAlivePlayers.Num();
 	
-	for (int i = 0; i < PlayerActors.Num(); i++)
+	for (int i = 0; i < CurrentAlivePlayers.Num(); i++)
 	{
-		AActor* Player = PlayerActors[i];
+		AActor* Player = CurrentAlivePlayers[i];
 		if (!Player) return;
 		
 		float Angle = AnglePerPlayer * i;
@@ -99,7 +86,6 @@ void ASpleefGameMode::StartSpleefGame()
 		SpawnRotation.Roll = 0.0f;
 		
 		Player->TeleportTo(SpawnLocation, SpawnRotation, false, true);
-		CurrentAlivePlayers.Add(Player);
 	}
 	
 	ApplyRandomModifiers(CurrentAlivePlayers);
@@ -107,8 +93,7 @@ void ASpleefGameMode::StartSpleefGame()
 
 void ASpleefGameMode::KillPlayer(AActor* Player)
 {
-	CurrentAlivePlayers.Remove(Player);
-	OnPlayerDiedDelegate.Broadcast(Player);
+	Super::KillPlayer(Player);
 	
 	if (CurrentAlivePlayers.Num() == 1)
 	{
@@ -135,8 +120,7 @@ void ASpleefGameMode::ApplyRandomModifiers(const TArray<AActor*>& Players)
 	FString ModifierString = "";
 	for (int i = 0; i < NumModifiers; i++)
 	{
-		const int RandomIndex = FMath::RandRange(0, PossibleModifiers.Num() - 1);
-		USpleefModifier* Modifier = PossibleModifiers[RandomIndex];
+		USpleefModifier* Modifier = UMobiusUtils::GetRandomItem(PossibleModifiers);
 		
 		ActiveModifiers.Add(Modifier);
 		Modifier->ApplyModifier(Players);

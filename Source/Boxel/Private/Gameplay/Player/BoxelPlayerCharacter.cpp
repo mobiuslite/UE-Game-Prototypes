@@ -1,21 +1,24 @@
 
 #include "Boxel/Public/Gameplay/Player/BoxelPlayerCharacter.h"
-
-#include "AbilitySystemComponent.h"
 #include "Boxel/Public/Gameplay/Player/Movement/BoxelPlayerMovementComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputMappingContext.h"
+#include "Components/CapsuleComponent.h"
 #include "Core/GameHUD.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
-#include "Gameplay/Weapons/Projectiles/Projectile.h"
-#include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
+#include "Gameplay/Weapons/GunBase.h"
 #include "Net/UnrealNetwork.h"
-#include "Utility/MobiusUtils.h"
+#include "Utility/CollisionConsts.h"
 
 ABoxelPlayerCharacter::ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxelPlayerMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
+	
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	
+	Capsule->SetCollisionResponseToChannel(ECC_Gun, ECR_Overlap);
+	Capsule->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::ABoxelPlayerCharacter::OnGunOverlap);
 }
 
 FRotator ABoxelPlayerCharacter::GetViewRotation() const
@@ -47,40 +50,20 @@ FRotator ABoxelPlayerCharacter::GetViewRotation() const
 void ABoxelPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	if (HasAuthority() && IsValid(StartingGunClass))
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.bNoFail = true;
+		AGunBase* NewGun = GetWorld()->SpawnActor<AGunBase>(StartingGunClass, SpawnParams);
+		PickUpGun(NewGun);
+	}
 }
 
 void ABoxelPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	
-	if (FireTimer > 0.0f)
-	{
-		FireTimer -= DeltaTime;
-	}
-	
-	if (IsValid(ProjectileClass) && bTriggerDown && FireTimer <= 0.0f)
-	{
-		const auto ASC = GetAbilitySystemComponent();
-		
-		bool bFound;
-		const float AttackSpeed = ASC->GetGameplayAttributeValue(UMACommonAttributeSet::GetAttackSpeedAttribute(), bFound);
-		
-		const float SecondsBetweenFire = (1.0f / AttackSpeed) * 60.0f;
-		FireTimer += SecondsBetweenFire;
-		
-		FVector Location;
-		UMobiusUtils::GetCameraLocation(GetController(), Location);
-	
-		Location += GetControlRotation().Vector() * 125.0f;
-	
-		Server_FireProjectile(Location, GetControlRotation());
-	
-		if (!HasAuthority())
-		{
-			FireProjectile(Location, GetControlRotation());
-		}
-	}
-	
+
 	if (const UCharacterMovementComponent* MovementComp = GetCharacterMovement())
 	{
 		if (MovementComp->MovementMode == MOVE_Falling)
@@ -95,20 +78,68 @@ void ABoxelPlayerCharacter::PossessedBy(AController* NewController)
 	Super::PossessedBy(NewController);
 }
 
+void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (HeldGun) return;
+	if (!HasAuthority()) return;
+	
+	if (AGunBase* Gun = Cast<AGunBase>(OtherActor))
+	{
+		PickUpGun(Gun);
+	}
+}
+
+void ABoxelPlayerCharacter::PickUpGun(AGunBase* Gun)
+{
+	if (!Gun) return;
+	if (!HasAuthority()) return;
+	
+	HeldGun = Gun;
+	OnRep_HeldGun(nullptr);
+}
+
+void ABoxelPlayerCharacter::DropHeldGun()
+{
+	if (!HeldGun) return;
+	if (!HeldGun->IsDroppable()) return;
+	
+	HeldGun->SetHolder(nullptr);
+	
+	AGunBase* PreviousGun = HeldGun;
+	HeldGun = nullptr;
+	OnRep_HeldGun(PreviousGun);
+}
+
+void ABoxelPlayerCharacter::OnRep_HeldGun(AGunBase* LastGun)
+{
+	if (HeldGun)
+	{
+		HeldGun->SetHolder(this);
+	}
+	
+	if (LastGun)
+	{
+		LastGun->SetHolder(nullptr);
+	}
+}
+
 void ABoxelPlayerCharacter::OnTriggerReleased_Implementation()
 {
-	bTriggerDown = false;
+	if (HeldGun)
+	{
+		HeldGun->ReleaseTrigger();
+	}
 }
 
 void ABoxelPlayerCharacter::OnTriggerPressed_Implementation()
 {
-	bTriggerDown = true;
+	if (HeldGun)
+	{
+		HeldGun->PullTrigger();
+	}
 }
 
-void ABoxelPlayerCharacter::Server_FireProjectile_Implementation(const FVector& Location, const FRotator& Rotation)
-{
-	FireProjectile(Location, Rotation);
-}
 
 void ABoxelPlayerCharacter::Landed(const FHitResult& Hit)
 {
@@ -130,22 +161,6 @@ void ABoxelPlayerCharacter::OnRep_Talking_Implementation()
 	}
 }
 
-void ABoxelPlayerCharacter::FireProjectile(const FVector& Location, const FRotator& Rotation)
-{
-	//const FTransform ProjectileTransform = FTransform(Rotation, Location);
-
-	//AProjectile* NewProjectile = Cast<AProjectile>(UGameplayStatics::BeginDeferredActorSpawnFromClass(GetWorld(), ProjectileClass, ProjectileTransform,
-	//	ESpawnActorCollisionHandlingMethod::AlwaysSpawn, this));
-	//
-	//UGameplayStatics::FinishSpawningActor(NewProjectile, ProjectileTransform, ESpawnActorScaleMethod::MultiplyWithRoot);
-	
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.Instigator = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	
-	GetWorld()->SpawnActor<AProjectile>(ProjectileClass, Location, Rotation, SpawnParams);
-}
 
 void ABoxelPlayerCharacter::MoveInput(const FInputActionValue& Value)
 {
@@ -242,5 +257,6 @@ void ABoxelPlayerCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimePro
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, bTalking);
+	DOREPLIFETIME(ThisClass, HeldGun);
 }
 

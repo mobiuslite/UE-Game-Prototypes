@@ -1,13 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
+#include "MobiusGameMode.h"
 #include "SpleefGameMode.generated.h"
 
 class USpleefModifier;
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDiedSignature, AActor*, DeadPlayer);
+
 UCLASS()
-class BOXEL_API ASpleefGameMode : public AGameModeBase
+class BOXEL_API ASpleefGameMode : public AMobiusGameMode
 {
 	GENERATED_BODY()
 	
@@ -16,16 +16,8 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	
-	UFUNCTION(BlueprintCallable)
-	void StartSpleefGame();
-	
-	UFUNCTION(BlueprintCallable)
-	void KillPlayer(AActor* Player);
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
-	int NumBots = 0;
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	TSubclassOf<APawn> BotClass; 
+	virtual void StartGame() override;
+	virtual void KillPlayer(AActor* Player) override;
 	
 protected:
 	
@@ -41,12 +33,6 @@ protected:
 	TArray<USpleefModifier*> ActiveModifiers;
 	
 	void OnPlayerWin(AActor* Winner);
-	
-	UPROPERTY(BlueprintReadOnly)
-	TArray<AActor*> CurrentAlivePlayers;
-	
-	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
-	FOnPlayerDiedSignature OnPlayerDiedDelegate;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	float SpawnRadius = 1000.0f;
