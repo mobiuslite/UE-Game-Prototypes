@@ -24,7 +24,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	static bool GetCameraControlTraceLocation(AController* Controller, float Distance, FVector& StartLocation, FVector& EndLocation);
 	
-	//Creates start and end location for a trace directly out of the camera looking straight ahead
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	static bool GetCameraLocation(AController* Controller, FVector& Location);
 	
