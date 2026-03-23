@@ -37,7 +37,7 @@ protected:
 	void OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
 	UFUNCTION()
 	void PickUpGun(AGunBase* Gun);
-	UFUNCTION()
+	UFUNCTION(Server, Reliable)
 	void DropHeldGun();
 	
 	UFUNCTION()
@@ -58,6 +58,8 @@ protected:
 	UInputAction* JumpAction;
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* FireAction;
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
+	UInputAction* DropAction;
 	
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* PushToTalkAction;
@@ -86,6 +88,8 @@ private:
 	
 	void FireInput(const FInputActionValue& Value);
 	void FireInput_Released(const FInputActionValue& Value);
+	
+	void DropInput(const FInputActionValue& Value);
 	
 	void TalkInput(const FInputActionValue& Value);
 	void TalkInput_Released(const FInputActionValue& Value);

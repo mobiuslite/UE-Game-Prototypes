@@ -20,7 +20,8 @@ public class Boxel : ModuleRules
 			"MobiusAbilityComponent",
 			"MobiusUISubsystem",
 			"GameplayAbilities",
-			"CommonUI"
+			"CommonUI", 
+			"AIModule"
 		});
 
 		// Uncomment if you are using Slate UI

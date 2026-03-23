@@ -29,6 +29,9 @@ public:
 	static bool GetCameraLocation(AController* Controller, FVector& Location);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static FVector AddVectorDirection(const FVector& Origin, const FVector& Direction, const float Distance);
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
 	static FVector StableLerpVector(const FVector& Current, const FVector& Target, const float Exponent, const float DeltaSeconds)
 	{
 		return FMath::Lerp(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds));
@@ -59,6 +62,40 @@ public:
 	static T GetRandomItem(const TArray<T>& Array)
 	{
 		return Array[FMath::RandRange(0, Array.Num() - 1)];
+	}
+	
+	template<class T>
+	static TArray<T> GetRandomItems(const TArray<T>& Array, const int RequestedAmount, const bool bCanHaveDuplicateEntries = false)
+	{
+		TArray<T> Results;
+		if (Array.Num() == 0) return Results;	
+		
+		Results.SetNum(RequestedAmount, EAllowShrinking::No);
+		
+		TArray<T> PossibleItems;
+		PossibleItems.Append(Array);
+
+		for (int i = 0; i < RequestedAmount; ++i)
+		{
+			const int RandomIndex = FMath::RandRange(0, PossibleItems.Num() - 1);
+			
+			Results[i] = PossibleItems[RandomIndex];
+			PossibleItems.RemoveAt(RandomIndex);
+			
+			if (PossibleItems.Num() == 0 && Results.Num() != RequestedAmount)
+			{
+				if (bCanHaveDuplicateEntries)
+				{
+					PossibleItems.Append(Array);
+				}
+				else
+				{
+					break;
+				}
+			}
+		}
+		
+		return Results;
 	}
 	
 	template<class T>

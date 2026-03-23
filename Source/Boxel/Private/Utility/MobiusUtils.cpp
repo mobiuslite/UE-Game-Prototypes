@@ -51,8 +51,13 @@ bool UMobiusUtils::GetCameraLocation(AController* Controller, FVector& Location)
 	return true;
 }
 
+FVector UMobiusUtils::AddVectorDirection(const FVector& Origin, const FVector& Direction, const float Distance)
+{
+	return Origin + (Direction.GetSafeNormal() * Distance);
+}
+
 void UMobiusUtils::SetInputModeGameEnabled(const UObject* WorldContextObject, const bool bGameOnlyEnabled,
-	const bool bFlushInput)
+                                           const bool bFlushInput)
 {
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, 0))
 	{

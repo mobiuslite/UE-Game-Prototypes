@@ -63,14 +63,14 @@ void ASpleefGameMode::StartGame()
 	
 	if (!HighestWorldGen) return;
 	
-	if (CurrentAlivePlayers.Num() == 0) return;
+	if (AlivePlayers.Num() == 0) return;
 	
 	const FVector CenterLocation = HighestWorldGen->GetWorldCenter();
-	const float AnglePerPlayer = 360.0f / CurrentAlivePlayers.Num();
+	const float AnglePerPlayer = 360.0f / AlivePlayers.Num();
 	
-	for (int i = 0; i < CurrentAlivePlayers.Num(); i++)
+	for (int i = 0; i < AlivePlayers.Num(); i++)
 	{
-		AActor* Player = CurrentAlivePlayers[i];
+		AActor* Player = AlivePlayers[i];
 		if (!Player) return;
 		
 		float Angle = AnglePerPlayer * i;
@@ -88,16 +88,16 @@ void ASpleefGameMode::StartGame()
 		Player->TeleportTo(SpawnLocation, SpawnRotation, false, true);
 	}
 	
-	ApplyRandomModifiers(CurrentAlivePlayers);
+	ApplyRandomModifiers(AlivePlayers);
 }
 
 void ASpleefGameMode::KillPlayer(AActor* Player)
 {
 	Super::KillPlayer(Player);
 	
-	if (CurrentAlivePlayers.Num() == 1)
+	if (AlivePlayers.Num() == 1)
 	{
-		OnPlayerWin(CurrentAlivePlayers[0]);
+		OnPlayerWin(AlivePlayers[0]);
 	}
 	
 	if (!Player->IsA(ABoxelPlayerCharacter::StaticClass()))

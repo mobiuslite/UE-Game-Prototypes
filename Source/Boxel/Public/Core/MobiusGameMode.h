@@ -30,7 +30,7 @@ public:
 protected:
 	
 	UPROPERTY(BlueprintReadOnly)
-	TArray<AActor*> CurrentAlivePlayers;
+	TArray<AActor*> AlivePlayers;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	int NumBots = 0;

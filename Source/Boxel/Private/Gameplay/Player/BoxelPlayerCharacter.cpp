@@ -99,12 +99,13 @@ void ABoxelPlayerCharacter::PickUpGun(AGunBase* Gun)
 	OnRep_HeldGun(nullptr);
 }
 
-void ABoxelPlayerCharacter::DropHeldGun()
+void ABoxelPlayerCharacter::DropHeldGun_Implementation()
 {
 	if (!HeldGun) return;
+	if (!HasAuthority()) return;
 	if (!HeldGun->IsDroppable()) return;
 	
-	HeldGun->SetHolder(nullptr);
+	HeldGun->RemoveHolder(this);
 	
 	AGunBase* PreviousGun = HeldGun;
 	HeldGun = nullptr;
@@ -120,7 +121,7 @@ void ABoxelPlayerCharacter::OnRep_HeldGun(AGunBase* LastGun)
 	
 	if (LastGun)
 	{
-		LastGun->SetHolder(nullptr);
+		LastGun->RemoveHolder(this);
 	}
 }
 
@@ -201,6 +202,11 @@ void ABoxelPlayerCharacter::FireInput_Released(const FInputActionValue& Value)
 	OnTriggerReleased();
 }
 
+void ABoxelPlayerCharacter::DropInput(const FInputActionValue& Value)
+{
+	DropHeldGun();
+}
+
 void ABoxelPlayerCharacter::TalkInput(const FInputActionValue& Value)
 {
 	if (!bTalking)
@@ -244,6 +250,8 @@ void ABoxelPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::FireInput);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ABoxelPlayerCharacter::FireInput_Released);
+		
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::DropInput);
 		
 		EnhancedInputComponent->BindAction(PushToTalkAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::TalkInput);
 		EnhancedInputComponent->BindAction(PushToTalkAction, ETriggerEvent::Completed, this, &ABoxelPlayerCharacter::TalkInput_Released);

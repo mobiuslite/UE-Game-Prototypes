@@ -16,6 +16,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 	void SetHolder(APawn* HolderPawn);
+	void RemoveHolder(const APawn* HolderPawn, const bool bThrow = true);
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	APawn* GetHolder () const { return Holder; }
 
@@ -39,6 +40,10 @@ protected:
 	float RPM = 400.0f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun")
 	bool bDroppable = true;
+	UPROPERTY(EditDefaultsOnly, Category="Gun")
+	float DropImpulseStrength = 240.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun")
+	float DropThrowOffset = 50.0f;
 	
 	UPROPERTY(BlueprintReadOnly)
 	bool bTriggerDown;
@@ -47,6 +52,9 @@ protected:
 	
 	virtual void BeginPlay() override;
 private:
+	
 	UPROPERTY()
 	APawn* Holder;
+	
+	void SetPhysicsEnabled(const bool bEnabled);
 };

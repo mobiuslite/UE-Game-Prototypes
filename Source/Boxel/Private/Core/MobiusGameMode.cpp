@@ -8,7 +8,7 @@
 
 void AMobiusGameMode::StartGame()
 {
-	CurrentAlivePlayers.Empty();
+	AlivePlayers.Empty();
 	
 	TArray<AActor*> PlayerActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ABoxelPlayerCharacter::StaticClass(), PlayerActors);
@@ -24,11 +24,11 @@ void AMobiusGameMode::StartGame()
 		}
 	}
 	
-	CurrentAlivePlayers.Append(PlayerActors);
+	AlivePlayers.Append(PlayerActors);
 }
 
 void AMobiusGameMode::KillPlayer(AActor* Player)
 {
-	CurrentAlivePlayers.Remove(Player);
+	AlivePlayers.Remove(Player);
 	OnPlayerDiedDelegate.Broadcast(Player);
 }
