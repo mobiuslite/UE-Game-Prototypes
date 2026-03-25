@@ -18,4 +18,7 @@ class MOBIUSABILITYCOMPONENT_API AMAPlayerController : public APlayerController,
 	
 public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	virtual void PostProcessInput(const float DeltaTime, const bool bGamePaused) override;
+	
+	virtual void OnUnPossess() override;
 };

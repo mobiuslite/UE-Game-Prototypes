@@ -19,6 +19,14 @@ class MOBIUSABILITYCOMPONENT_API UMACommonAttributeSet : public UAttributeSet
 	GENERATED_BODY()
 	
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentHealth)
+	FGameplayAttributeData CurrentHealth;
+	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, CurrentHealth);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth)
+	FGameplayAttributeData MaxHealth;
+	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, MaxHealth);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_MoveSpeed)
 	FGameplayAttributeData MoveSpeed;
 	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, MoveSpeed);
@@ -27,7 +35,19 @@ public:
 	FGameplayAttributeData AttackSpeed;
 	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, AttackSpeed);
 	
+	// Meta attributes
+	UPROPERTY(BlueprintReadOnly)
+	FGameplayAttributeData DamageAmount;
+	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, DamageAmount);
+	
+	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
+	
 protected:
+	UFUNCTION()
+	virtual void OnRep_CurrentHealth(const FGameplayAttributeData& OldCurrentHealth);
+	UFUNCTION()
+	virtual void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
+	
 	UFUNCTION()
 	virtual void OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed);
 	UFUNCTION()

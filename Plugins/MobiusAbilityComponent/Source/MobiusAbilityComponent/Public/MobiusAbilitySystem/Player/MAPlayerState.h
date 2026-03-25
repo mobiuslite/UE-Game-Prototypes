@@ -17,7 +17,7 @@ public:
 	AMAPlayerState();
 	
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
-
+	
 protected:
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
 	UMobiusAbilitySystemComponent* AbilityComponent;
