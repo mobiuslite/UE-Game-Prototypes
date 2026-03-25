@@ -3,8 +3,11 @@
 
 #include "Gameplay/Weapons/GunBase.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "Net/UnrealNetwork.h"
 #include "Utility/CollisionConsts.h"
-#include "Utility/MobiusUtils.h"
+#include "GameFramework/Character.h"
 
 
 AGunBase::AGunBase()
@@ -18,17 +21,18 @@ AGunBase::AGunBase()
 	
 	GunMesh->SetCollisionObjectType(ECC_Gun);
 	GunMesh->SetSimulatePhysics(true);
+}
+
+float AGunBase::GetFireRate() const
+{
+	return (1.0f / RPM) * 60.0f;
+}
+
+void AGunBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-}
-
-void AGunBase::PullTrigger()
-{
-	bTriggerDown = true;
-}
-
-void AGunBase::ReleaseTrigger()
-{
-	bTriggerDown = false;
+	DOREPLIFETIME(ThisClass, CurrentAmmo);
 }
 
 void AGunBase::BeginPlay()
@@ -47,34 +51,6 @@ void AGunBase::SetPhysicsEnabled(const bool bEnabled)
 void AGunBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	
-	if (FireTimer > 0.0f)
-	{
-		FireTimer -= DeltaTime;
-	}
-	
-	if (Holder && bTriggerDown && FireTimer <= 0.0f)
-	{
-		const float SecondsBetweenFire = (1.0f / RPM) * 60.0f;
-		FireTimer += SecondsBetweenFire;
-		
-		FVector CameraLocation;
-		UMobiusUtils::GetCameraLocation(Holder->GetController(), CameraLocation);
-	
-		CameraLocation += Holder->GetControlRotation().Vector();
-		
-		Server_FireProjectile(CameraLocation, Holder->GetControlRotation());
-	
-		if (!HasAuthority())
-		{
-			FireProjectile(CameraLocation, Holder->GetControlRotation());
-		}
-	}
-}
-
-void AGunBase::Server_FireProjectile_Implementation(const FVector& Location, const FRotator& Rotation)
-{
-	FireProjectile(Location, Rotation);
 }
 
 void AGunBase::SetHolder(APawn* HolderPawn)
@@ -91,13 +67,23 @@ void AGunBase::SetHolder(APawn* HolderPawn)
 	//Disable collision while holding
 	SetPhysicsEnabled(false);
 	
-	bTriggerDown = false;
-	
 	const FAttachmentTransformRules Rules = FAttachmentTransformRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-	AttachToActor(Holder, Rules);
-		
-	SetActorRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
-	SetActorRelativeLocation(FVector(20.0f, 30.0f, 34.0f));
+	if (ACharacter* Character = Cast<ACharacter>(HolderPawn))
+	{
+		AttachToComponent(Character->GetMesh(), Rules, FName("GunSocket"));
+	}
+	else
+	{
+		AttachToActor(Holder, Rules);	
+	}
+	
+	if (HasAuthority())
+	{
+		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
+		{
+			AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
+		}
+	}
 }
 
 void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
@@ -106,8 +92,6 @@ void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
 	SetOwner(nullptr);
 	
 	SetPhysicsEnabled(true);
-	
-	bTriggerDown = false;
 	
 	if (bThrow)
 	{
@@ -125,6 +109,14 @@ void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
 		if (HasAuthority())
 		{
 			GunMesh->AddImpulse(HolderPawn->GetBaseAimRotation().Vector() * DropImpulseStrength, NAME_None, true);
+		}
+	}
+	
+	if (HasAuthority())
+	{
+		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
+		{
+			AbilityComp->ClearAllAbilitiesWithInputID(1);
 		}
 	}
 }

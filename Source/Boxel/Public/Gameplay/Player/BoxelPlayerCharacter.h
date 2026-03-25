@@ -19,6 +19,9 @@ class BOXEL_API ABoxelPlayerCharacter : public AMACharacter
 public:
 	ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	AGunBase* GetHeldGun() const { return HeldGun; }
+	
 	UPROPERTY(BlueprintReadWrite)
 	FRotator ExtraViewRotation;
 	virtual FRotator GetViewRotation() const override;
@@ -78,6 +81,9 @@ protected:
 	void OnRep_Talking();
 	UPROPERTY(ReplicatedUsing=OnRep_Talking, BlueprintReadOnly)
 	bool bTalking;
+	
+	UPROPERTY()
+	TSubclassOf<UAnimInstance> OriginalAnimInstanceClass;
 private:
 	
 	void MoveInput(const FInputActionValue& Value);

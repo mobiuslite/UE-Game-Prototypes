@@ -26,7 +26,7 @@ void ADeathBringerGameMode::StartGame()
 		APlayerController* Controller = Player->GetController<APlayerController>();
 		if (!Controller) continue;
 		
-		if (!CanBeDeathBringer(Controller))
+		if (CanBeDeathBringer(Controller))
 		{
 			PossibleDeathBringers.Add(Controller);
 		}

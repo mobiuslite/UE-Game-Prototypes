@@ -29,7 +29,7 @@ void ABoxelPlayerState::SetGenericTeamId(const FGenericTeamId& NewTeamID)
 	{
 		const FGenericTeamId OldTeamID = TeamID;
 		TeamID = NewTeamID;
-		ConditionalBroadcastTeamChanged(this, OldTeamID, TeamID);
+		OnRep_TeamID(OldTeamID);
 	}
 }
 
@@ -45,7 +45,7 @@ void ABoxelPlayerState::GetLifetimeReplicatedProps(TArray<class FLifetimePropert
 	DOREPLIFETIME_CONDITION(ThisClass, TeamID, COND_OwnerOnly);
 }
 
-void ABoxelPlayerState::OnRep_MyTeamID(const FGenericTeamId OldTeamID)
+void ABoxelPlayerState::OnRep_TeamID(const FGenericTeamId OldTeamID)
 {
 	ConditionalBroadcastTeamChanged(this, OldTeamID, TeamID);
 }

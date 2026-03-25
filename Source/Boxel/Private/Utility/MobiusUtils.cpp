@@ -7,7 +7,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 
-bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float Distance, FVector& StartLocation, FVector& EndLocation)
+bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float const Distance, FVector& OutStartLocation, FVector& OutEndLocation)
 {
 	const APlayerController* PlayerController = Cast<APlayerController>(Controller);
 	
@@ -15,16 +15,16 @@ bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float Distanc
 	if (!PlayerController->PlayerCameraManager) return false;
 	if (!PlayerController->GetPawn()) return false;
 	
-	StartLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
+	OutStartLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
 	const APawn* Pawn = PlayerController->GetPawn();
 	const FRotator AimRotation = Pawn->GetBaseAimRotation();
-	EndLocation = StartLocation + AimRotation.Vector() * Distance;
+	OutEndLocation = OutStartLocation + AimRotation.Vector() * Distance;
 	
 	return true;
 }
 
-bool UMobiusUtils::GetCameraControlTraceLocation(AController* Controller, float Distance, FVector& StartLocation,
-	FVector& EndLocation)
+bool UMobiusUtils::GetCameraControlTraceLocation(AController* Controller, const float Distance, FVector& OutStartLocation,
+	FVector& OutEndLocation)
 {
 	const APlayerController* PlayerController = Cast<APlayerController>(Controller);
 	
@@ -32,21 +32,21 @@ bool UMobiusUtils::GetCameraControlTraceLocation(AController* Controller, float 
 	if (!PlayerController->PlayerCameraManager) return false;
 	if (!PlayerController->GetPawn()) return false;
 	
-	StartLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
+	OutStartLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
 	const APawn* Pawn = PlayerController->GetPawn();
 	const FRotator AimRotation = Pawn->GetControlRotation();
-	EndLocation = StartLocation + AimRotation.Vector() * Distance;
+	OutEndLocation = OutStartLocation + AimRotation.Vector() * Distance;
 	
 	return true;
 }
 
-bool UMobiusUtils::GetCameraLocation(AController* Controller, FVector& Location)
+bool UMobiusUtils::GetCameraLocation(AController* Controller, FVector& OutLocation)
 {
 	const APlayerController* PlayerController = Cast<APlayerController>(Controller);
 	
 	if (!PlayerController) return false;
 	if (!PlayerController->PlayerCameraManager) return false;
-	Location = PlayerController->PlayerCameraManager->GetCameraLocation();
+	OutLocation = PlayerController->PlayerCameraManager->GetCameraLocation();
 	
 	return true;
 }

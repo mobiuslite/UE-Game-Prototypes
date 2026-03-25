@@ -1,5 +1,7 @@
 
 #include "Boxel/Public/Gameplay/Player/BoxelPlayerCharacter.h"
+
+#include "AbilitySystemComponent.h"
 #include "Boxel/Public/Gameplay/Player/Movement/BoxelPlayerMovementComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputMappingContext.h"
@@ -58,6 +60,14 @@ void ABoxelPlayerCharacter::BeginPlay()
 		AGunBase* NewGun = GetWorld()->SpawnActor<AGunBase>(StartingGunClass, SpawnParams);
 		PickUpGun(NewGun);
 	}
+	
+	if (const USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		if (const UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			OriginalAnimInstanceClass = AnimInstance->GetClass();
+		}
+	}
 }
 
 void ABoxelPlayerCharacter::Tick(float DeltaTime)
@@ -76,6 +86,17 @@ void ABoxelPlayerCharacter::Tick(float DeltaTime)
 void ABoxelPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
+	
+	if (NewController && NewController->IsLocalController())
+	{	
+		if (const APlayerController* PlayerController = Cast<APlayerController>(NewController))
+		{
+			if (AGameHUD* HUD = PlayerController->GetHUD<AGameHUD>())
+			{
+				HUD->OnPlayerStateAdded(PlayerController->GetPlayerState<APlayerState>());
+			}
+		}
+	}
 }
 
 void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
@@ -117,30 +138,34 @@ void ABoxelPlayerCharacter::OnRep_HeldGun(AGunBase* LastGun)
 	if (HeldGun)
 	{
 		HeldGun->SetHolder(this);
+		if (const TSubclassOf<UAnimInstance> GunABP = HeldGun->GetGunAnimInstanceClass())
+		{
+			GetMesh()->SetAnimInstanceClass(GunABP);
+		}
 	}
 	
 	if (LastGun)
 	{
 		LastGun->RemoveHolder(this);
+		GetMesh()->SetAnimInstanceClass(OriginalAnimInstanceClass);
 	}
 }
 
 void ABoxelPlayerCharacter::OnTriggerReleased_Implementation()
 {
-	if (HeldGun)
+	if (UAbilitySystemComponent* AbilityComp = GetAbilitySystemComponent())
 	{
-		HeldGun->ReleaseTrigger();
-	}
+		AbilityComp->ReleaseInputID(1);
+	} 
 }
 
 void ABoxelPlayerCharacter::OnTriggerPressed_Implementation()
 {
-	if (HeldGun)
+	if (UAbilitySystemComponent* AbilityComp = GetAbilitySystemComponent())
 	{
-		HeldGun->PullTrigger();
-	}
+		AbilityComp->PressInputID(1);
+	} 
 }
-
 
 void ABoxelPlayerCharacter::Landed(const FHitResult& Hit)
 {

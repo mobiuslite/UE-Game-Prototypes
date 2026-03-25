@@ -23,11 +23,15 @@ public:
 	virtual void SetGenericTeamId(const FGenericTeamId& NewTeamID) override;
 	virtual FGenericTeamId GetGenericTeamId() const override;
 	
+	virtual FOnTeamIndexChangedDelegate* GetOnTeamIndexChangedDelegate() override { return &OnTeamChanged; }
+	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 protected:
 	
 	UPROPERTY(BlueprintAssignable)
 	FOnSpeakingChangedSignature OnSpeakingChanged;
+	UPROPERTY(BlueprintAssignable)
+	FOnTeamIndexChangedDelegate OnTeamChanged;
 	
 	UFUNCTION(BlueprintNativeEvent)
 	void OnSetSpeaking(const bool bSpeaking);
@@ -35,8 +39,8 @@ protected:
 private:
 	
 	UFUNCTION()
-	void OnRep_MyTeamID(const FGenericTeamId OldTeamID);
+	void OnRep_TeamID(const FGenericTeamId OldTeamID);
 	
-	UPROPERTY(ReplicatedUsing=OnRep_MyTeamID)
+	UPROPERTY(ReplicatedUsing=OnRep_TeamID)
 	FGenericTeamId TeamID;
 };

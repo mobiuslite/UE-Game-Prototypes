@@ -21,7 +21,8 @@ public class Boxel : ModuleRules
 			"MobiusUISubsystem",
 			"GameplayAbilities",
 			"CommonUI", 
-			"AIModule"
+			"AIModule",
+			"GameplayTags"
 		});
 
 		// Uncomment if you are using Slate UI

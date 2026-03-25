@@ -20,6 +20,4 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category="Gun")
 	TSubclassOf<AProjectile> ProjectileClass;
-	
-	virtual void FireProjectile(const FVector& Location, const FRotator& Rotation) override;
 };
