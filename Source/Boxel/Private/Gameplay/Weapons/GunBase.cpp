@@ -21,6 +21,26 @@ AGunBase::AGunBase()
 	
 	GunMesh->SetCollisionObjectType(ECC_Gun);
 	GunMesh->SetSimulatePhysics(true);
+	
+	MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("Muzzle Location"));
+	MuzzleLocation->SetupAttachment(GunMesh);
+}
+
+bool AGunBase::CanBePickedUp(const APawn* PawnHolder) const
+{
+	bool bResult = true;
+	
+	for (int i = 0; i < HolderHistory.Num(); ++i)
+	{
+		const FHolderHistoryData& History = HolderHistory[i];
+		if (History.PreviousHolder == PawnHolder)
+		{
+			bResult = false;
+			break;
+		}
+	}
+	
+	return bResult;
 }
 
 float AGunBase::GetFireRate() const
@@ -51,6 +71,25 @@ void AGunBase::SetPhysicsEnabled(const bool bEnabled)
 void AGunBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	for (int i = 0; i < HolderHistory.Num();)
+	{
+		const FHolderHistoryData& History = HolderHistory[i];
+		float Timer = History.HeldCooldownTimer;
+		Timer -= DeltaTime;
+		if (Timer <= 0.0f)
+		{
+			HolderHistory.RemoveAt(i);
+		}
+		else
+		{
+			FHolderHistoryData DataOverride;
+			DataOverride.HeldCooldownTimer = Timer;
+			DataOverride.PreviousHolder = History.PreviousHolder;
+			HolderHistory[i] = DataOverride;
+			i++;
+		}
+	}
 }
 
 void AGunBase::SetHolder(APawn* HolderPawn)
@@ -61,6 +100,8 @@ void AGunBase::SetHolder(APawn* HolderPawn)
 		return;
 	}
 	
+	UE_LOG(LogTemp, Display, TEXT("Setting holder of gun"));
+	
 	this->Holder = HolderPawn;
 	SetOwner(HolderPawn);
 	
@@ -68,7 +109,7 @@ void AGunBase::SetHolder(APawn* HolderPawn)
 	SetPhysicsEnabled(false);
 	
 	const FAttachmentTransformRules Rules = FAttachmentTransformRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-	if (ACharacter* Character = Cast<ACharacter>(HolderPawn))
+	if (const ACharacter* Character = Cast<ACharacter>(HolderPawn))
 	{
 		AttachToComponent(Character->GetMesh(), Rules, FName("GunSocket"));
 	}
@@ -88,15 +129,14 @@ void AGunBase::SetHolder(APawn* HolderPawn)
 
 void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
 {
+	if (!HolderPawn) return;
+	
+	UE_LOG(LogTemp, Display, TEXT("Removing holder from gun"));
+	
 	this->Holder = nullptr;
 	SetOwner(nullptr);
 	
 	SetPhysicsEnabled(true);
-	
-	if (bThrow)
-	{
-		AddActorWorldOffset(HolderPawn->GetBaseAimRotation().Vector() * DropThrowOffset);
-	}
 	
 	const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
 	DetachFromActor(Rules);
@@ -118,6 +158,12 @@ void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
 		{
 			AbilityComp->ClearAllAbilitiesWithInputID(1);
 		}
+		
+		FHolderHistoryData History;
+		History.PreviousHolder = HolderPawn;
+		History.HeldCooldownTimer = 0.5f;
+		
+		HolderHistory.Add(History);
 	}
 }
 

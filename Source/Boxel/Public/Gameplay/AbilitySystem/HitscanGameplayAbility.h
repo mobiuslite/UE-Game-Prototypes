@@ -21,6 +21,10 @@ protected:
 	virtual void OnFinishFire() override;
 	
 	void StartRangedWeaponTargeting();
+	UFUNCTION()
+	void OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
+	
+	void OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag);
 	
 	TArray<FHitResult> PerformLocalTargeting();
 	static int32 FindFirstPawnHitResult(const TArray<FHitResult>& HitResults);
@@ -31,9 +35,7 @@ protected:
 	
 	void AddAdditionalTraceIgnoreActors(FCollisionQueryParams& TraceParams) const;
 	
-	void OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag);
-	UFUNCTION()
-	void OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
+	
 	
 private:
 	FDelegateHandle OnTargetDataReadyCallbackDelegateHandle;

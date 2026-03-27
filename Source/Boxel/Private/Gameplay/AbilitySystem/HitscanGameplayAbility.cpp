@@ -8,6 +8,7 @@
 #include "GameplayCueFunctionLibrary.h"
 #include "Gameplay/Weapons/GunBase.h"
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
 
 void UHitscanGameplayAbility::FireGun(AGunBase* Gun)
@@ -59,6 +60,74 @@ void UHitscanGameplayAbility::StartRangedWeaponTargeting()
 
 	// Process the target data immediately
 	OnTargetDataReadyCallback(TargetData, FGameplayTag());
+}
+
+void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
+{
+	//Muzzle Cue
+	if (const AGunBase* Gun = GetGunActor())
+	{
+		FGameplayCueParameters Params;
+		Params.TargetAttachComponent = Gun->GetMuzzleComponent();
+		Params.Location = Gun->GetMuzzleComponent()->GetComponentLocation();
+		Params.Instigator = GetAvatarActorFromActorInfo();
+		
+		K2_ExecuteGameplayCueWithParams(Gun->GetFireCueTag(), Params);
+	}
+	
+	//Impact cue
+	const int32 DataCount = UAbilitySystemBlueprintLibrary::GetDataCountFromTargetData(TargetData);
+	for (int i = 0; i < DataCount; ++i)
+	{
+		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, i);
+		if (HitResult.bBlockingHit)
+		{
+			const FGameplayCueParameters Params = UGameplayCueFunctionLibrary::MakeGameplayCueParametersFromHitResult(HitResult);
+			K2_ExecuteGameplayCueWithParams(TAG_Gun_Bullet_Impact, Params);
+		}
+	}
+	
+	if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
+	{
+		const FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass);
+		K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
+	}
+}
+
+void UHitscanGameplayAbility::OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData,
+													FGameplayTag ApplicationTag)
+{
+	UAbilitySystemComponent* MyAbilityComponent = CurrentActorInfo->AbilitySystemComponent.Get();
+	check(MyAbilityComponent);
+
+	if (const FGameplayAbilitySpec* AbilitySpec = MyAbilityComponent->FindAbilitySpecFromHandle(CurrentSpecHandle))
+	{
+		FScopedPredictionWindow	ScopedPrediction(MyAbilityComponent);
+
+		// Take ownership of the target data to make sure no callbacks into game code invalidate it out from under us
+		FGameplayAbilityTargetDataHandle LocalTargetDataHandle(MoveTemp(const_cast<FGameplayAbilityTargetDataHandle&>(InData)));
+
+		const bool bShouldNotifyServer = CurrentActorInfo->IsLocallyControlled() && !CurrentActorInfo->IsNetAuthority();
+		if (bShouldNotifyServer)
+		{
+			MyAbilityComponent->CallServerSetReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey(), LocalTargetDataHandle, ApplicationTag, MyAbilityComponent->ScopedPredictionKey);
+		}
+		
+		// See if we still have ammo
+		if (CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+		{
+			// Let the blueprint do stuff like apply effects to the targets
+			OnRangedWeaponTargetDataReady(LocalTargetDataHandle);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Weapon ability %s failed to commit"), *GetPathName());
+			K2_EndAbility();
+		}
+	}
+
+	// We've processed the data
+	MyAbilityComponent->ConsumeClientReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey());
 }
 
 TArray<FHitResult> UHitscanGameplayAbility::PerformLocalTargeting()
@@ -186,33 +255,6 @@ FHitResult UHitscanGameplayAbility::WeaponTrace(const FVector& StartTrace, const
 	return Hit;
 }
 
-void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
-{
-	if (const AGunBase* Gun = GetGunActor())
-	{
-		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, 0);
-		const FGameplayCueParameters Params = UGameplayCueFunctionLibrary::MakeGameplayCueParametersFromHitResult(HitResult);
-	
-		K2_ExecuteGameplayCueWithParams(Gun->GetFireCueTag(), Params);
-	}
-	
-	const int32 DataCount = UAbilitySystemBlueprintLibrary::GetDataCountFromTargetData(TargetData);
-	for (int i = 0; i < DataCount; ++i)
-	{
-		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, i);
-		if (HitResult.bBlockingHit)
-		{
-			//TODO: Impact Cue
-		}
-	}
-	
-	if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
-	{
-		const FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass);
-		K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
-	}
-}
-
 void UHitscanGameplayAbility::AddAdditionalTraceIgnoreActors(FCollisionQueryParams& TraceParams) const
 {
 	if (AActor* Avatar = GetAvatarActorFromActorInfo())
@@ -300,40 +342,4 @@ void UHitscanGameplayAbility::TraceBulletsInCartridge(const FRangedWeaponFiringI
 			OutHits.Add(Impact);
 		}
 	}
-}
-
-void UHitscanGameplayAbility::OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData,
-                                                    FGameplayTag ApplicationTag)
-{
-	UAbilitySystemComponent* MyAbilityComponent = CurrentActorInfo->AbilitySystemComponent.Get();
-	check(MyAbilityComponent);
-
-	if (const FGameplayAbilitySpec* AbilitySpec = MyAbilityComponent->FindAbilitySpecFromHandle(CurrentSpecHandle))
-	{
-		FScopedPredictionWindow	ScopedPrediction(MyAbilityComponent);
-
-		// Take ownership of the target data to make sure no callbacks into game code invalidate it out from under us
-		FGameplayAbilityTargetDataHandle LocalTargetDataHandle(MoveTemp(const_cast<FGameplayAbilityTargetDataHandle&>(InData)));
-
-		const bool bShouldNotifyServer = CurrentActorInfo->IsLocallyControlled() && !CurrentActorInfo->IsNetAuthority();
-		if (bShouldNotifyServer)
-		{
-			MyAbilityComponent->CallServerSetReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey(), LocalTargetDataHandle, ApplicationTag, MyAbilityComponent->ScopedPredictionKey);
-		}
-		
-		// See if we still have ammo
-		if (CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
-		{
-			// Let the blueprint do stuff like apply effects to the targets
-			OnRangedWeaponTargetDataReady(LocalTargetDataHandle);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Weapon ability %s failed to commit"), *GetPathName());
-			K2_EndAbility();
-		}
-	}
-
-	// We've processed the data
-	MyAbilityComponent->ConsumeClientReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey());
 }

@@ -49,6 +49,17 @@ FRotator ABoxelPlayerCharacter::GetViewRotation() const
 	return Result + ExtraViewRotation;
 }
 
+void ABoxelPlayerCharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
+	const bool bIsDead)
+{
+	Super::Client_OnDamageTaken_Implementation(DamageInstigator, DamageCauser, bIsDead);
+}
+
+void ABoxelPlayerCharacter::Server_OnPlayerDead()
+{
+	Super::Server_OnPlayerDead();
+}
+
 void ABoxelPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -107,6 +118,7 @@ void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponen
 	
 	if (AGunBase* Gun = Cast<AGunBase>(OtherActor))
 	{
+		if (!Gun->CanBePickedUp(this)) return;
 		PickUpGun(Gun);
 	}
 }

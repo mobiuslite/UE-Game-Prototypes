@@ -26,6 +26,9 @@ public:
 	FRotator ExtraViewRotation;
 	virtual FRotator GetViewRotation() const override;
 
+	virtual void Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead) override;
+	virtual void Server_OnPlayerDead() override;
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;

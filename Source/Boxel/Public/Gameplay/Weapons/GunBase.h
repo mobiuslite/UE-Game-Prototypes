@@ -11,6 +11,17 @@
 class UGameplayAbility;
 class UGunGameplayAbility;
 
+USTRUCT()
+struct FHolderHistoryData
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	const APawn* PreviousHolder;
+	UPROPERTY()
+	float HeldCooldownTimer;
+};
+
 UCLASS()
 class BOXEL_API AGunBase : public AActor
 {
@@ -28,6 +39,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool IsDroppable() const { return bDroppable; }
+	bool CanBePickedUp(const APawn* PawnHolder) const;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	float GetFireRate() const;
@@ -35,7 +47,9 @@ public:
 	float IsFullyAutomatic() const { return bFullyAutomatic; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	FGameplayTag GetFireCueTag() const { return OnFireGameplayCueTag; };
+	FGameplayTag GetFireCueTag() const { return OnFireGameplayCueTag; }
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	USceneComponent* GetMuzzleComponent() const { return MuzzleLocation; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	TSubclassOf<UAnimInstance> GetGunAnimInstanceClass() const { return GunABP; }
@@ -44,15 +58,15 @@ public:
 	
 protected:
 	
-	bool bReplicateFiring = true;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* GunMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	USceneComponent* MuzzleLocation;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gun|Animation")
 	TSubclassOf<UAnimInstance> GunABP;
 
-	//TODO: Using RPM like this would allow clients to set their own RPM and make damage cheats through it: Fix
+	//TODO: Using RPM like this would allow clients to set their own RPM and make damage cheats through it
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Stats")
 	float RPM = 400.0f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Stats")
@@ -64,6 +78,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Throwing")
 	float DropThrowOffset = 50.0f;
 	
+	//TODO: Implement
 	UPROPERTY(Replicated, BlueprintReadOnly, VisibleAnywhere, Category = "Gun|Ammo")
 	int CurrentAmmo = 0;
 	
@@ -82,4 +97,8 @@ private:
 	APawn* Holder;
 	
 	void SetPhysicsEnabled(const bool bEnabled);
+	
+	//Stop players who just threw the gun from picking it up immediately 
+	UPROPERTY()
+	TArray<FHolderHistoryData> HolderHistory;
 };
