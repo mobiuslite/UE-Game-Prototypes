@@ -8,6 +8,7 @@
 #include "GameplayCueFunctionLibrary.h"
 #include "Gameplay/Weapons/GunBase.h"
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/MobiusCvars.h"
 #include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
 
@@ -152,9 +153,11 @@ TArray<FHitResult> UHitscanGameplayAbility::PerformLocalTargeting()
 
 FHitResult UHitscanGameplayAbility::DoSingleBulletTrace(const FVector& StartTrace, const FVector& EndTrace, float SweepRadius, bool bIsSimulated, OUT TArray<FHitResult>& OutHits) const
 {
-	static float DebugThickness = 1.0f;
-	DrawDebugLine(GetWorld(), StartTrace, EndTrace, FColor::Red, false, 1.0f, 0, DebugThickness);
-
+	if (CVDebugDrawGunfire->GetBool())
+	{
+		static float DebugThickness = 1.0f;
+		DrawDebugLine(GetWorld(), StartTrace, EndTrace, FColor::Red, false, 1.0f, 0, DebugThickness);
+	}
 	FHitResult Impact;
 
 	// Trace and process instant hit if something was hit
@@ -319,8 +322,11 @@ void UHitscanGameplayAbility::TraceBulletsInCartridge(const FRangedWeaponFiringI
 
 		if (HitActor)
 		{
-			DrawDebugPoint(GetWorld(), Impact.ImpactPoint, 25.0f, FColor::Red, false, 1.0f);
-
+			if (CVDebugDrawGunfire->GetBool())
+			{
+				DrawDebugPoint(GetWorld(), Impact.ImpactPoint, 25.0f, FColor::Red, false, 1.0f);
+			}
+			
 			if (AllImpacts.Num() > 0)
 			{
 				OutHits.Append(AllImpacts);

@@ -57,6 +57,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	static void TickDownFloat(UPARAM(ref) float& Timer, const float DeltaTime, bool& bDone);
 	
+	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(Keywords="seconds, time, float"))
+	static FString FloatToMinutesSeconds(float Seconds);
+	
 	template<class T>
 	static T GetRandomItem(const TArray<T>& Array)
 	{
@@ -98,12 +101,29 @@ public:
 	}
 	
 	template<class T>
+	static T* GetActorOfClassEX(const UObject* WorldContextObject, const TSubclassOf<AActor> ActorClass)
+	{
+		if (ActorClass)
+		{
+			if (const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+			{
+				if (const TActorIterator<AActor> It(World, ActorClass); It)
+				{
+					AActor* Actor = *It;
+					return Cast<T>(Actor);
+				}
+			}
+		}
+		return nullptr;
+	}
+	
+	template<class T>
 	static TArray<T*> GetAllActorsOfClassEX(const UObject* WorldContextObject, const TSubclassOf<AActor> ActorClass)
 	{
 		TArray<T*> Result;
 		if (ActorClass)
 		{
-			if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+			if (const UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
 			{
 				for (TActorIterator It(World, ActorClass); It; ++It)
 				{

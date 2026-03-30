@@ -7,10 +7,12 @@
 #include "InputMappingContext.h"
 #include "Components/CapsuleComponent.h"
 #include "Core/GameHUD.h"
+#include "Core/MobiusGameMode.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Gameplay/Weapons/GunBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Utility/CollisionConsts.h"
+#include "Utility/MobiusUtils.h"
 
 ABoxelPlayerCharacter::ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxelPlayerMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -57,7 +59,11 @@ void ABoxelPlayerCharacter::Client_OnDamageTaken_Implementation(const AControlle
 
 void ABoxelPlayerCharacter::Server_OnPlayerDead()
 {
-	Super::Server_OnPlayerDead();
+	AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>();
+	if (!GameMode) return;
+	
+	GameMode->KillPlayer(this);
+	this->Destroy();
 }
 
 void ABoxelPlayerCharacter::BeginPlay()
@@ -81,6 +87,16 @@ void ABoxelPlayerCharacter::BeginPlay()
 	}
 }
 
+void ABoxelPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	
+	if (HasAuthority())
+	{
+		DropHeldGun(false);
+	}
+}
+
 void ABoxelPlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -94,6 +110,7 @@ void ABoxelPlayerCharacter::Tick(float DeltaTime)
 	}
 }
 
+//Servers on player state ready
 void ABoxelPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -110,8 +127,23 @@ void ABoxelPlayerCharacter::PossessedBy(AController* NewController)
 	}
 }
 
+//Client player state ready
+void ABoxelPlayerCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	
+	const APlayerController* PlayerController = GetController<APlayerController>();
+	if (PlayerController && PlayerController->IsLocalController())
+	{
+		if (AGameHUD* GameHUD = PlayerController->GetHUD<AGameHUD>())
+		{
+			GameHUD->OnPlayerStateAdded(GetPlayerState());
+		}
+	}
+}
+
 void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (HeldGun) return;
 	if (!HasAuthority()) return;
@@ -129,27 +161,28 @@ void ABoxelPlayerCharacter::PickUpGun(AGunBase* Gun)
 	if (!HasAuthority()) return;
 	
 	HeldGun = Gun;
+	HeldGun->SetHolder(this);
+	
 	OnRep_HeldGun(nullptr);
 }
 
-void ABoxelPlayerCharacter::DropHeldGun_Implementation()
+void ABoxelPlayerCharacter::DropHeldGun_Implementation(const bool bThrow)
 {
 	if (!HeldGun) return;
 	if (!HasAuthority()) return;
 	if (!HeldGun->IsDroppable()) return;
 	
-	HeldGun->RemoveHolder(this);
+	HeldGun->RemoveHolder(this, bThrow);
 	
-	AGunBase* PreviousGun = HeldGun;
+	const AGunBase* PreviousGun = HeldGun;
 	HeldGun = nullptr;
 	OnRep_HeldGun(PreviousGun);
 }
 
-void ABoxelPlayerCharacter::OnRep_HeldGun(AGunBase* LastGun)
+void ABoxelPlayerCharacter::OnRep_HeldGun(const AGunBase* LastGun)
 {
 	if (HeldGun)
 	{
-		HeldGun->SetHolder(this);
 		if (const TSubclassOf<UAnimInstance> GunABP = HeldGun->GetGunAnimInstanceClass())
 		{
 			GetMesh()->SetAnimInstanceClass(GunABP);
@@ -158,7 +191,6 @@ void ABoxelPlayerCharacter::OnRep_HeldGun(AGunBase* LastGun)
 	
 	if (LastGun)
 	{
-		LastGun->RemoveHolder(this);
 		GetMesh()->SetAnimInstanceClass(OriginalAnimInstanceClass);
 	}
 }
@@ -242,6 +274,12 @@ void ABoxelPlayerCharacter::FireInput_Released(const FInputActionValue& Value)
 void ABoxelPlayerCharacter::DropInput(const FInputActionValue& Value)
 {
 	DropHeldGun();
+	
+	//Client prediction
+	if (HeldGun)
+	{
+		HeldGun->RemoveHolder(this, true);
+	}
 }
 
 void ABoxelPlayerCharacter::TalkInput(const FInputActionValue& Value)

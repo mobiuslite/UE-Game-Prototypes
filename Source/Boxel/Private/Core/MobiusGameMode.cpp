@@ -4,15 +4,14 @@
 #include "Core/MobiusGameMode.h"
 
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
-#include "Kismet/GameplayStatics.h"
+#include "Utility/MobiusUtils.h"
 
 void AMobiusGameMode::StartGame()
 {
 	AlivePlayers.Empty();
 	
-	TArray<AActor*> PlayerActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ABoxelPlayerCharacter::StaticClass(), PlayerActors);
-
+	TArray<APawn*> PlayerActors = UMobiusUtils::GetAllActorsOfClassEX<APawn>(GetWorld(), ABoxelPlayerCharacter::StaticClass());
+	
 	if (IsValid(BotClass))
 	{
 		for (int i = 0; i < NumBots; ++i)
@@ -27,8 +26,16 @@ void AMobiusGameMode::StartGame()
 	AlivePlayers.Append(PlayerActors);
 }
 
-void AMobiusGameMode::KillPlayer(AActor* Player)
+void AMobiusGameMode::KillPlayer(APawn* Player)
 {
 	AlivePlayers.Remove(Player);
-	OnPlayerDiedDelegate.Broadcast(Player);
+	OnPlayerDiedDelegate.Broadcast(Player->GetController());
+}
+
+void AMobiusGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	FGameModeEvents::OnGameModePostLoginEvent().AddUObject(this, &ThisClass::OnPlayerLogin);
+	FGameModeEvents::OnGameModeLogoutEvent().AddUObject(this, &ThisClass::OnPlayerLogout);
 }

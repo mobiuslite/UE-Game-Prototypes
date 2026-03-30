@@ -19,20 +19,32 @@ class BOXEL_API ABoxelPlayerCharacter : public AMACharacter
 public:
 	ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 	
+	//TODO: Add a bit more of a generic inventory system. Allow 1 side arm, and 1 main firearm
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	AGunBase* GetHeldGun() const { return HeldGun; }
+	
+	UFUNCTION()
+	void PickUpGun(AGunBase* Gun);
+	UFUNCTION(Server, Reliable)
+	void DropHeldGun(const bool bThrow = true);
 	
 	UPROPERTY(BlueprintReadWrite)
 	FRotator ExtraViewRotation;
 	virtual FRotator GetViewRotation() const override;
 
+	//Visuals only
 	virtual void Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead) override;
+	
+	//Player death logic
 	virtual void Server_OnPlayerDead() override;
 	
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	virtual void Tick(float DeltaTime) override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
 	
 	UFUNCTION(BlueprintNativeEvent)
 	void OnTriggerPressed();
@@ -41,13 +53,9 @@ protected:
 	
 	UFUNCTION()
 	void OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
-	UFUNCTION()
-	void PickUpGun(AGunBase* Gun);
-	UFUNCTION(Server, Reliable)
-	void DropHeldGun();
 	
 	UFUNCTION()
-	void OnRep_HeldGun(AGunBase* LastGun);
+	void OnRep_HeldGun(const AGunBase* LastGun);
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HeldGun)
 	AGunBase* HeldGun;

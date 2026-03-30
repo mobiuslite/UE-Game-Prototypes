@@ -23,8 +23,8 @@ public:
 	FString ModifierName;
 	
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
-	void ApplyModifier(const TArray<AActor*>& Players);
+	void ApplyModifier(const TArray<APawn*>& Players);
 	
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
-	void DestroyModifier(const TArray<AActor*>& Players);
+	void DestroyModifier(const TArray<APawn*>& Players);
 };

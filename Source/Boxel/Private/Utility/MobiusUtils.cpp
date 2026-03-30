@@ -88,3 +88,14 @@ void UMobiusUtils::TickDownFloat(float& Timer, const float DeltaTime, bool& bDon
 		bDone = true;
 	}
 }
+
+FString UMobiusUtils::FloatToMinutesSeconds(float Seconds)
+{
+	const TCHAR* NegativeModifier = Seconds < 0.f? TEXT("-") : TEXT("");
+	Seconds = FMath::Abs(Seconds);
+	
+	const int32 NumMinutes = FMath::FloorToInt(Seconds/60.f);
+	const int32 NumSeconds = FMath::FloorToInt(Seconds-(NumMinutes*60.f));
+	
+	return FString::Printf(TEXT("%s%02d:%02d"), NegativeModifier, NumMinutes, NumSeconds);
+}

@@ -6,7 +6,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "MobiusGameMode.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDiedSignature, AActor*, DeadPlayer);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDiedSignature, AController*, DeadPlayerController);
 
 /**
  * 
@@ -22,18 +22,23 @@ public:
 	virtual void StartGame();
 	
 	UFUNCTION(BlueprintCallable)
-	virtual void KillPlayer(AActor* Player);
+	virtual void KillPlayer(APawn* Player);
 	
 	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
 	FOnPlayerDiedSignature OnPlayerDiedDelegate;
 	
 protected:
 	
+	virtual void OnPlayerLogin(AGameModeBase* GameMode, APlayerController* PC) {}
+	virtual void OnPlayerLogout(AGameModeBase* GameMode, AController* PC) {}
+	
 	UPROPERTY(BlueprintReadOnly)
-	TArray<AActor*> AlivePlayers;
+	TArray<APawn*> AlivePlayers;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
 	int NumBots = 0;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<APawn> BotClass; 
+	
+	virtual void BeginPlay() override;
 };

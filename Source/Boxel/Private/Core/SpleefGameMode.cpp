@@ -7,7 +7,6 @@
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Gameplay/Player/BoxelPlayerController.h"
 #include "Gameplay/WorldGen/WorldGenActor.h"
-#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Utility/MobiusUtils.h"
 
@@ -40,15 +39,15 @@ void ASpleefGameMode::StartGame()
 {
 	Super::StartGame();
 	
-	TArray<AActor*> WorldGenActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorldGenActor::StaticClass(), WorldGenActors);
+	
+	TArray<AWorldGenActor*> WorldGenActors = UMobiusUtils::GetAllActorsOfClassEX<AWorldGenActor>(GetWorld(), AWorldGenActor::StaticClass());
 	
 	//Get the highest world gen, as that is the starting platform
 	const AWorldGenActor* HighestWorldGen = nullptr;
 	float HighestPosition = -999.0f;
 	for (int i = 0; i < WorldGenActors.Num(); i++)
 	{
-		AWorldGenActor* WorldGen = Cast<AWorldGenActor>(WorldGenActors[i]);
+		AWorldGenActor* WorldGen = WorldGenActors[i];
 		WorldGen->MULTICAST_ResetWorld();
 		
 		if (!WorldGen) return;
@@ -91,7 +90,7 @@ void ASpleefGameMode::StartGame()
 	ApplyRandomModifiers(AlivePlayers);
 }
 
-void ASpleefGameMode::KillPlayer(AActor* Player)
+void ASpleefGameMode::KillPlayer(APawn* Player)
 {
 	Super::KillPlayer(Player);
 	
@@ -106,7 +105,7 @@ void ASpleefGameMode::KillPlayer(AActor* Player)
 	}
 }
 
-void ASpleefGameMode::ApplyRandomModifiers(const TArray<AActor*>& Players)
+void ASpleefGameMode::ApplyRandomModifiers(const TArray<APawn*>& Players)
 {
 	DestroyCurrentModifiers();
 	
@@ -146,8 +145,7 @@ void ASpleefGameMode::ApplyRandomModifiers(const TArray<AActor*>& Players)
 
 void ASpleefGameMode::DestroyCurrentModifiers()
 {
-	TArray<AActor*> PlayerActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ABoxelPlayerCharacter::StaticClass(), PlayerActors);
+	const TArray<APawn*> PlayerActors = UMobiusUtils::GetAllActorsOfClassEX<APawn>(GetWorld(), ABoxelPlayerCharacter::StaticClass());
 	
 	for (int i = 0; i < ActiveModifiers.Num(); ++i)
 	{

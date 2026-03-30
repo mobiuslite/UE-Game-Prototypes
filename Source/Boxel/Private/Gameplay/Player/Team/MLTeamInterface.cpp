@@ -14,8 +14,8 @@ void IMLTeamAgentInterface::ConditionalBroadcastTeamChanged(const TScriptInterfa
 {
 	if (OldTeamID != NewTeamID)
 	{
-		const int32 OldTeamIndex = GenericTeamIdToInteger(OldTeamID); 
-		const int32 NewTeamIndex = GenericTeamIdToInteger(NewTeamID);
+		const int32 OldTeamIndex = OldTeamID.GetId(); 
+		const int32 NewTeamIndex = NewTeamID.GetId();
 
 		UObject* ThisObj = This.GetObject();
 

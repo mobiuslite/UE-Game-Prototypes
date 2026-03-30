@@ -27,6 +27,7 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 		constexpr bool bReplicateEndAbility = true;
 		constexpr bool bWasCancelled = true;
 		EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+		return;
 	}
 	
 	FireGun(Gun);

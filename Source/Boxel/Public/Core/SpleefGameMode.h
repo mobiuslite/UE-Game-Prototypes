@@ -17,11 +17,11 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual void StartGame() override;
-	virtual void KillPlayer(AActor* Player) override;
+	virtual void KillPlayer(APawn* Player) override;
 	
 protected:
 	
-	void ApplyRandomModifiers(const TArray<AActor*>& Players);
+	void ApplyRandomModifiers(const TArray<APawn*>& Players);
 	void DestroyCurrentModifiers();
 	
 	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)

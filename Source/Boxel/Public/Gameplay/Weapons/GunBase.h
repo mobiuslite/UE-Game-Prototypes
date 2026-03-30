@@ -91,9 +91,13 @@ protected:
 	FGameplayTag OnFireGameplayCueTag;
 	
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
+	UFUNCTION()
+	void OnRep_Holder();
 private:
 	
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing=OnRep_Holder)
 	APawn* Holder;
 	
 	void SetPhysicsEnabled(const bool bEnabled);

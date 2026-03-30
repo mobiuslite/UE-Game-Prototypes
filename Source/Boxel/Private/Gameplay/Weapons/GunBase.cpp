@@ -53,11 +53,50 @@ void AGunBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, CurrentAmmo);
+	DOREPLIFETIME(ThisClass, Holder);
 }
 
 void AGunBase::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void AGunBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	if (HasAuthority() && Holder)
+	{
+		RemoveHolder(Holder, false);
+	}
+}
+
+void AGunBase::OnRep_Holder()
+{
+	SetOwner(Holder);
+	
+	//Disable collision while holding
+	SetPhysicsEnabled(Holder == nullptr);
+	
+	if (Holder)
+	{
+		const FAttachmentTransformRules Rules = FAttachmentTransformRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
+		if (const ACharacter* Character = Cast<ACharacter>(Holder))
+		{
+			AttachToComponent(Character->GetMesh(), Rules, FName("GunSocket"));
+		}
+		else
+		{
+			AttachToActor(Holder, Rules);	
+		}
+	}
+	else
+	{
+		const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
+		DetachFromActor(Rules);
+		
+		//Rotate gun so the side is facing the player that dropped it
+		GunMesh->AddWorldRotation(FRotator(0.0f, 45.0f, 0.0f));
+	}
 }
 
 void AGunBase::SetPhysicsEnabled(const bool bEnabled)
@@ -94,6 +133,8 @@ void AGunBase::Tick(float DeltaTime)
 
 void AGunBase::SetHolder(APawn* HolderPawn)
 {
+	if (!HasAuthority()) return;
+	
 	if (!HolderPawn)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("GunBase: NO HOLDER GIVEN. Please pass a valid holder. If you're trying to remove the holder, use RemoveHolder"));
@@ -103,67 +144,35 @@ void AGunBase::SetHolder(APawn* HolderPawn)
 	UE_LOG(LogTemp, Display, TEXT("Setting holder of gun"));
 	
 	this->Holder = HolderPawn;
-	SetOwner(HolderPawn);
-	
-	//Disable collision while holding
-	SetPhysicsEnabled(false);
-	
-	const FAttachmentTransformRules Rules = FAttachmentTransformRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-	if (const ACharacter* Character = Cast<ACharacter>(HolderPawn))
+	OnRep_Holder();
+		
+	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Holder))
 	{
-		AttachToComponent(Character->GetMesh(), Rules, FName("GunSocket"));
-	}
-	else
-	{
-		AttachToActor(Holder, Rules);	
-	}
-	
-	if (HasAuthority())
-	{
-		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
-		{
-			AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
-		}
+		AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
 	}
 }
 
 void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
 {
-	if (!HolderPawn) return;
-	
 	UE_LOG(LogTemp, Display, TEXT("Removing holder from gun"));
 	
 	this->Holder = nullptr;
-	SetOwner(nullptr);
-	
-	SetPhysicsEnabled(true);
-	
-	const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
-	DetachFromActor(Rules);
-	
+	OnRep_Holder();
+		
+	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
+	{
+		AbilityComp->ClearAllAbilitiesWithInputID(1);
+	}
+		
+	FHolderHistoryData History;
+	History.PreviousHolder = HolderPawn;
+	History.HeldCooldownTimer = 0.5f;
+		
+	HolderHistory.Add(History);
+		
 	if (bThrow)
 	{
-		//Rotate gun so the side is facing the player that dropped it
-		GunMesh->AddWorldRotation(FRotator(0.0f, 45.0f, 0.0f));
-		
-		if (HasAuthority())
-		{
-			GunMesh->AddImpulse(HolderPawn->GetBaseAimRotation().Vector() * DropImpulseStrength, NAME_None, true);
-		}
-	}
-	
-	if (HasAuthority())
-	{
-		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
-		{
-			AbilityComp->ClearAllAbilitiesWithInputID(1);
-		}
-		
-		FHolderHistoryData History;
-		History.PreviousHolder = HolderPawn;
-		History.HeldCooldownTimer = 0.5f;
-		
-		HolderHistory.Add(History);
+		GunMesh->AddImpulse(HolderPawn->GetBaseAimRotation().Vector() * DropImpulseStrength, NAME_None, true);
 	}
 }
 
