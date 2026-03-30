@@ -17,6 +17,11 @@ AMACharacter::AMACharacter(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 }
 
+void AMACharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
+	const bool bIsDead)
+{
+}
+
 void AMACharacter::BeginPlay()
 {
 	Super::BeginPlay();

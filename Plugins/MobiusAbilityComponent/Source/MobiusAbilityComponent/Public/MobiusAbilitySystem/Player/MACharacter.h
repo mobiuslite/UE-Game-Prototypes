@@ -17,6 +17,11 @@ public:
 	AMACharacter();
 	AMACharacter(const FObjectInitializer& ObjectInitializer);
 
+	//Tells the client they took damage. If you want numbers, subscribe to the health attribute on the pawn's Ability System Component
+	UFUNCTION(Client, Reliable)
+	virtual void Client_OnDamageTaken(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead);
+	virtual void Server_OnPlayerDead() {};
+	
 protected:
 	virtual void BeginPlay() override;
 	

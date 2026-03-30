@@ -4,6 +4,7 @@
 #include "MobiusAbilitySystem/MAGameplayAbility.h"
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_AbilityInputBlocked, "Gameplay.AbilityInputBlocked");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_Invincible, "Gameplay.Invincible");
 
 UMobiusAbilitySystemComponent::UMobiusAbilitySystemComponent()
 {
@@ -30,6 +31,7 @@ void UMobiusAbilitySystemComponent::BeginPlay()
 	
 	//Might move this to the character, makes the ASC more generic
 	AttributeSet = GetSet<UMACommonAttributeSet>();
+	AttributeSet->OnHealthChanged.AddDynamic(this, &ThisClass::OnAttributeSetHealthChanged);
 }
 
 void UMobiusAbilitySystemComponent::ProcessAbilityInput(const float DeltaTime, const bool bGamePaused)
@@ -70,6 +72,23 @@ void UMobiusAbilitySystemComponent::ProcessAbilityInput(const float DeltaTime, c
 void UMobiusAbilitySystemComponent::ClearAbilityInput()
 {
 	InputsHeld.Empty();
+}
+
+void UMobiusAbilitySystemComponent::ResetAttributes()
+{
+	for (int32 i=0; i < DefaultStartingData.Num(); ++i)
+	{
+		if (DefaultStartingData[i].Attributes && DefaultStartingData[i].DefaultStartingTable)
+		{
+			UAttributeSet* Attributes = const_cast<UAttributeSet*>(GetOrCreateAttributeSubobject(DefaultStartingData[i].Attributes));
+			Attributes->InitFromMetaDataTable(DefaultStartingData[i].DefaultStartingTable);
+		}
+	}
+}
+
+void UMobiusAbilitySystemComponent::OnAttributeSetHealthChanged(float EffectMagnitude, float OldValue, float NewValue)
+{
+	OnHealthChanged.Broadcast(EffectMagnitude, OldValue, NewValue);
 }
 
 void UMobiusAbilitySystemComponent::TickComponent(float DeltaTime, ELevelTick TickType,

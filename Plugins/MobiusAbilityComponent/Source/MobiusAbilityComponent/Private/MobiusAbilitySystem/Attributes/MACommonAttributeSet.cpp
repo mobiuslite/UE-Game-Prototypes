@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
 #include "GameFramework/PlayerState.h"
+#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 #include "MobiusAbilitySystem/Player/MACharacter.h"
 #include "Net/UnrealNetwork.h"
 
@@ -22,6 +23,12 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			TargetActor = Cast<AMACharacter>(Data.Target.AbilityActorInfo->AvatarActor.Get());
 		}
 		
+		if (!TargetActor)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Target actor is null when trying to apply damage"));
+			return;
+		}
+		
 		const FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
 		
 		FHitResult HitResult;
@@ -36,24 +43,40 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			SourceInstigator = PlayerState->GetPlayerController();
 		}
 		
-		if (BaseDamageDone > 0.0f)
+		const AActor* SourceCauser = Context.GetEffectCauser();
+		
+		float FinalDamage = BaseDamageDone;
+		
+		if (const UAbilitySystemComponent* TargetAbilityComponent = TargetActor->GetAbilitySystemComponent())
+		{
+			if (TargetAbilityComponent->HasMatchingGameplayTag(TAG_Gameplay_Invincible))
+			{
+				FinalDamage = 0.0f;
+			}
+		}
+		
+		if (FinalDamage > 0.0f)
 		{	
-			UE_LOG(LogTemp, Log, TEXT("Took Damage: %f"), BaseDamageDone);
+			UE_LOG(LogTemp, Log, TEXT("Took Damage: %f"), FinalDamage);
 
 			const float OldHealth = GetCurrentHealth();
-			const float NewHealth = FMath::Clamp(OldHealth - BaseDamageDone, 0, GetMaxHealth());
+			const float NewHealth = FMath::Clamp(OldHealth - FinalDamage, 0, GetMaxHealth());
 			
 			SetCurrentHealth(NewHealth);
 
-			if (IsValid(TargetActor))
+			OnHealthChanged.Broadcast(FinalDamage, OldHealth, NewHealth);
+			
+			const AController* Instigator = Cast<AController>(SourceInstigator);
+			if (!Instigator)
 			{
-				const AController* Instigator = Cast<AController>(SourceInstigator);
-				if (!Instigator)
-				{
-					UE_LOG(LogTemp, Error, TEXT("MACommonAttributeSet: Instigator wasn't a controller or player state, PLEASE FIX"))
-				}
+				UE_LOG(LogTemp, Error, TEXT("MACommonAttributeSet: Instigator wasn't a controller or player state, PLEASE FIX"))
+			}
 				
-				//TargetActor->OnTookDamage(BaseDamageDone, Instigator, HitResult);
+			const bool bIsDead = NewHealth <= 0.0f;
+			TargetActor->Client_OnDamageTaken(Instigator, SourceCauser, bIsDead);
+			if (bIsDead)
+			{
+				TargetActor->Server_OnPlayerDead();
 			}
 		}
 	}
@@ -65,6 +88,11 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 void UMACommonAttributeSet::OnRep_CurrentHealth(const FGameplayAttributeData& OldCurrentHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(ThisClass, CurrentHealth, OldCurrentHealth);
+	
+	const float Health = GetCurrentHealth();
+	const float EstimatedMagnitude = Health - OldCurrentHealth.GetCurrentValue();
+	
+	OnHealthChanged.Broadcast(EstimatedMagnitude, OldCurrentHealth.GetCurrentValue(), Health);
 }
 
 void UMACommonAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)

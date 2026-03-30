@@ -13,13 +13,16 @@ GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName)\
 GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName)\
 GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FMAAttributeEvent, float, EffectMagnitude, float, OldValue, float, NewValue);
+
 UCLASS()
 class MOBIUSABILITYCOMPONENT_API UMACommonAttributeSet : public UAttributeSet
 {
 	GENERATED_BODY()
 	
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentHealth)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentHealth, Meta = (HideFromModifiers, AllowPrivateAccess = true))
 	FGameplayAttributeData CurrentHealth;
 	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, CurrentHealth);
 	
@@ -39,6 +42,9 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 	FGameplayAttributeData DamageAmount;
 	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, DamageAmount);
+	
+	UPROPERTY(BlueprintAssignable)
+	mutable FMAAttributeEvent OnHealthChanged;
 	
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 	
