@@ -6,6 +6,7 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
+#include "Gameplay/Interfaces/InventoryInterface.h"
 
 bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float const Distance, FVector& OutStartLocation, FVector& OutEndLocation)
 {
@@ -56,29 +57,6 @@ FVector UMobiusUtils::AddVectorDirection(const FVector& Origin, const FVector& D
 	return Origin + (Direction.GetSafeNormal() * Distance);
 }
 
-void UMobiusUtils::SetInputModeGameEnabled(const UObject* WorldContextObject, const bool bGameOnlyEnabled,
-                                           const bool bFlushInput)
-{
-	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(WorldContextObject, 0))
-	{
-		if (bGameOnlyEnabled)
-		{
-			UWidgetBlueprintLibrary::SetInputMode_GameOnly(PlayerController, bFlushInput);
-		}
-		else
-		{
-			UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(PlayerController, nullptr, EMouseLockMode::DoNotLock, bFlushInput);
-			
-			FVector2D ScreenSize;
-			GEngine->GameViewport->GetViewportSize(ScreenSize);
-			
-			PlayerController->SetMouseLocation(ScreenSize.X * 0.5f, ScreenSize.Y * 0.5f);
-		}
-		
-		PlayerController->bShowMouseCursor = !bGameOnlyEnabled;
-	}
-}
-
 void UMobiusUtils::TickDownFloat(float& Timer, const float DeltaTime, bool& bDone)
 {
 	bDone = false;
@@ -98,4 +76,16 @@ FString UMobiusUtils::FloatToMinutesSeconds(float Seconds)
 	const int32 NumSeconds = FMath::FloorToInt(Seconds-(NumMinutes*60.f));
 	
 	return FString::Printf(TEXT("%s%02d:%02d"), NegativeModifier, NumMinutes, NumSeconds);
+}
+
+bool UMobiusUtils::GetInventory(const AActor* Actor, UInventoryComponent*& OutInventory)
+{
+	if (!Actor) return false;
+	
+	if (!Actor->Implements<UInventoryInterface>()) return false;
+	const IInventoryInterface* Interface = Cast<IInventoryInterface>(Actor);
+	if (!Interface) return false;
+	
+	OutInventory = Interface->GetInventory();
+	return OutInventory != nullptr;
 }

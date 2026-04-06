@@ -17,6 +17,11 @@ void ADeathBringerGameState::SetRoundEndTime(const float EndTime)
 	RoundEndTimeWorldSeconds = EndTime + GetServerWorldTimeSeconds();
 }
 
+void ADeathBringerGameState::ShowRoundEndToast_Implementation(const bool bDeathBringerWin)
+{
+	BP_ShowRoundEndToast(bDeathBringerWin);
+}
+
 void ADeathBringerGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

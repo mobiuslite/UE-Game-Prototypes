@@ -29,6 +29,11 @@ public:
 	
 	void SetRoundEndTime(const float EndTime);
 	
+	UFUNCTION(NetMulticast, Reliable)
+	void ShowRoundEndToast(const bool bDeathBringerWin);
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_ShowRoundEndToast(const bool bDeathBringerWin);
+	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 protected:

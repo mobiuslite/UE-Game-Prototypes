@@ -24,9 +24,9 @@ public:
 	
 	ADeathBringerGameMode();
 	
-	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	
+	//Hard reset will delete all bodies, reset all guns, and reset all players
 	void PrepareGame(const bool bHardReset);
 	
 	virtual void StartGame() override;
@@ -41,6 +41,8 @@ public:
 	static constexpr int32 NOTEAM_TEAMID = 255;
 	
 protected:
+	
+	virtual void BeginPlay() override;
 	
 	void SetRoundState(const EDeathBringerRoundState RoundState);
 	EDeathBringerRoundState GetRoundState() const;

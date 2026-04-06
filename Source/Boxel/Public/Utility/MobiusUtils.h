@@ -6,6 +6,7 @@
 
 #include "MobiusUtils.generated.h"
 
+class UInventoryComponent;
 struct FFloatSpringState;
 /**
  * 
@@ -50,9 +51,6 @@ public:
 	{
 		return FMath::Lerp(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds));
 	}
-
-	UFUNCTION(BlueprintCallable, meta=( WorldContext="WorldContextObject"))
-	static void SetInputModeGameEnabled(const UObject* WorldContextObject, const bool bGameOnlyEnabled, const bool bFlushInput);
 	
 	UFUNCTION(BlueprintCallable)
 	static void TickDownFloat(UPARAM(ref) float& Timer, const float DeltaTime, bool& bDone);
@@ -138,4 +136,7 @@ public:
 		}
 		return Result;
 	}
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool GetInventory(const AActor* Actor, UInventoryComponent*& OutInventory);
 };

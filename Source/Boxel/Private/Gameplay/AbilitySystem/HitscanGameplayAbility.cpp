@@ -7,7 +7,9 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayCueFunctionLibrary.h"
 #include "Gameplay/Weapons/GunBase.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/CollisionConsts.h"
 #include "Utility/MobiusCvars.h"
 #include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
@@ -20,6 +22,11 @@ void UHitscanGameplayAbility::FireGun(AGunBase* Gun)
 	OnTargetDataReadyCallbackDelegateHandle = MyAbilityComponent->AbilityTargetDataSetDelegate(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey()).AddUObject(this, &ThisClass::OnTargetDataReadyCallback);
 	
 	StartRangedWeaponTargeting();
+	
+	if (Gun)
+	{
+		Gun->ApplySpread();
+	}
 }
 
 void UHitscanGameplayAbility::OnFinishFire()
@@ -46,7 +53,6 @@ void UHitscanGameplayAbility::StartRangedWeaponTargeting()
 
 	TArray<FHitResult> FoundHits = PerformLocalTargeting();
 
-
 	FGameplayAbilityTargetDataHandle TargetData;
 	if (FoundHits.Num() > 0)
 	{
@@ -65,15 +71,25 @@ void UHitscanGameplayAbility::StartRangedWeaponTargeting()
 
 void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
 {
-	//Muzzle Cue
 	if (const AGunBase* Gun = GetGunActor())
 	{
+		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, 0);
+		//Muzzle Cue
 		FGameplayCueParameters Params;
 		Params.TargetAttachComponent = Gun->GetMuzzleComponent();
 		Params.Location = Gun->GetMuzzleComponent()->GetComponentLocation();
 		Params.Instigator = GetAvatarActorFromActorInfo();
+		Params.Normal = (HitResult.TraceEnd - Gun->GetMuzzleComponent()->GetComponentLocation()).GetSafeNormal();
 		
 		K2_ExecuteGameplayCueWithParams(Gun->GetFireCueTag(), Params);
+		
+		//Damage
+		const TSubclassOf<UGameplayEffect> DamageClass = Gun->GetDamageEffectClass();
+		if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
+		{
+			const FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass);
+			K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
+		}
 	}
 	
 	//Impact cue
@@ -86,12 +102,6 @@ void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbili
 			const FGameplayCueParameters Params = UGameplayCueFunctionLibrary::MakeGameplayCueParametersFromHitResult(HitResult);
 			K2_ExecuteGameplayCueWithParams(TAG_Gun_Bullet_Impact, Params);
 		}
-	}
-	
-	if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
-	{
-		const FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass);
-		K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
 	}
 }
 
@@ -145,6 +155,12 @@ TArray<FHitResult> UHitscanGameplayAbility::PerformLocalTargeting()
 		
 		InputData.AimDir = (InputData.EndTrace - InputData.StartTrace).GetSafeNormal();
 
+		if (const AGunBase* Gun = GetGunActor())
+		{
+			InputData.AimDir = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(InputData.AimDir, Gun->GetTotalBulletSpread() * 0.5f);
+			InputData.EndTrace = InputData.StartTrace + (InputData.AimDir * Range);
+		}
+		
 		TraceBulletsInCartridge(InputData,Results);
 	}
 	
@@ -216,16 +232,14 @@ FHitResult UHitscanGameplayAbility::WeaponTrace(const FVector& StartTrace, const
 	TraceParams.bReturnPhysicalMaterial = true;
 	AddAdditionalTraceIgnoreActors(TraceParams);
 	//TraceParams.bDebugQuery = true;
-
-	const ECollisionChannel TraceChannel = ECC_Pawn;
-
+	
 	if (SweepRadius > 0.0f)
 	{
-		GetWorld()->SweepMultiByChannel(HitResults, StartTrace, EndTrace, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(SweepRadius), TraceParams);
+		GetWorld()->SweepMultiByChannel(HitResults, StartTrace, EndTrace, FQuat::Identity, ECC_WeaponTrace, FCollisionShape::MakeSphere(SweepRadius), TraceParams);
 	}
 	else
 	{
-		GetWorld()->LineTraceMultiByChannel(HitResults, StartTrace, EndTrace, TraceChannel, TraceParams);
+		GetWorld()->LineTraceMultiByChannel(HitResults, StartTrace, EndTrace, ECC_WeaponTrace, TraceParams);
 	}
 
 	FHitResult Hit(ForceInit);

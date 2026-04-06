@@ -9,6 +9,8 @@
 #include "Utility/MobiusUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "Gameplay/DeathBringer/InventoryComponent.h"
+#include "Gameplay/DeathBringer/WeaponSpawner.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Kismet/GameplayStatics.h"
@@ -49,6 +51,18 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 {
 	SetRoundState(EDeathBringerRoundState::Preparing);
 	GetGameState<ADeathBringerGameState>()->SetRoundEndTime(StartGameWaitTime);
+
+	if (bHardReset)
+	{
+		const TArray<ABoxelPlayerCharacter*> PlayerPawns = UMobiusUtils::GetAllActorsOfClassEX<ABoxelPlayerCharacter>(GetWorld(), ABoxelPlayerCharacter::StaticClass());
+		for (int i = 0; i < PlayerPawns.Num(); ++i)
+		{
+			if (ABoxelPlayerCharacter* BoxelCharacter = PlayerPawns[i])
+			{
+				BoxelCharacter->Destroy();
+			}
+		}
+	}
 	
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
 	{
@@ -77,17 +91,27 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 					AbilityComp->AddLooseGameplayTag(TAG_Gameplay_Invincible);
 				}
 				
-				AbilityComp->ResetAttributes();
-				AbilityComp->ClearAllAbilities();
+				if (bHardReset)
+				{
+					AbilityComp->ResetAttributes();
+					AbilityComp->ClearAllAbilities();
+				}
+			}
+			UInventoryComponent* Inventory;
+			if (UMobiusUtils::GetInventory(PlayerController->GetPlayerState<APlayerState>(), Inventory))
+			{
+				Inventory->ClearInventory();
 			}
 		}
 	}
 	
 	if (bHardReset)
 	{
-		//TODO: Clear all guns
-	
-		//TODO: Spawn in new guns
+		TArray<AWeaponSpawner*> WeaponSpawners = UMobiusUtils::GetAllActorsOfClassEX<AWeaponSpawner>(GetWorld(), AWeaponSpawner::StaticClass());
+		for (int i = 0; i < WeaponSpawners.Num(); ++i)
+		{
+			WeaponSpawners[i]->ResetSpawner();
+		}
 	}
 	
 	FTimerHandle Handle;
@@ -154,8 +178,14 @@ void ADeathBringerGameMode::StartGame()
 
 void ADeathBringerGameMode::EndDeathBringerGame_Implementation(const bool bDeathBringerWin)
 {
-	SetRoundState(EDeathBringerRoundState::End);
-	GetGameState<ADeathBringerGameState>()->SetRoundEndTime(EndGameWaitTime);
+	if (ADeathBringerGameState* State = GetGameState<ADeathBringerGameState>())
+	{
+		if (State->GetRoundState() == End) return;
+		
+		State->SetRoundState(End);
+		State->SetRoundEndTime(EndGameWaitTime);
+		State->ShowRoundEndToast(bDeathBringerWin);
+	} 
 	
 	FTimerHandle Handle;
 	GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([this]()
