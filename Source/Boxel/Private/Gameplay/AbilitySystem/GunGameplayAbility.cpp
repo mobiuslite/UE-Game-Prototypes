@@ -31,6 +31,7 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	
 	FireGun(Gun);
+	Gun->ConsumeAmmo();
 	
 	Gun->ApplySpread();
 	Gun->ConsumeAmmo();
