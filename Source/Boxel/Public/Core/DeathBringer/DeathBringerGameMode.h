@@ -6,8 +6,26 @@
 #include "../MobiusGameMode.h"
 #include "DeathBringerGameMode.generated.h"
 
-enum EDeathBringerRoundState : int;
+namespace EDeathBringerRoundState
+{
+	enum Type : uint8;
+}
+
 class ADeathBringerGameState;
+
+UENUM(BlueprintType)
+namespace EDeathBringerTeam
+{
+	enum Type : uint8
+	{
+		None,
+	
+		Normal,
+		DeathBringer,
+		Saviour
+	};
+}
+
 
 /*
 	MustSpectate is overridden in the BP class to make players joining while game is active force to spectate. 
@@ -24,9 +42,9 @@ public:
 	
 	ADeathBringerGameMode();
 	
-	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	
+	//Hard reset will delete all bodies, reset all guns, and reset all players
 	void PrepareGame(const bool bHardReset);
 	
 	virtual void StartGame() override;
@@ -36,19 +54,29 @@ public:
 	
 	virtual void KillPlayer(APawn* Player) override;
 	
-	static constexpr int32 DEATHBRINGER_TEAMID = 2;
-	static constexpr int32 NORMALPLAYER_TEAMID = 1;
+	//Actors added will get destroyed upon round restart
+	void AddTransientActor(AActor* Actor);
+	
 	static constexpr int32 NOTEAM_TEAMID = 255;
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static TEnumAsByte<EDeathBringerTeam::Type> TeamIDToTeamEnum(const struct FGenericTeamId& TeamId);
 	
 protected:
 	
-	void SetRoundState(const EDeathBringerRoundState RoundState);
-	EDeathBringerRoundState GetRoundState() const;
+	virtual void BeginPlay() override;
+	
+	void SetRoundState(const EDeathBringerRoundState::Type RoundState);
+	EDeathBringerRoundState::Type GetRoundState() const;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float DeathBringerPlayerRatio = 0.25f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int MinDeathBringers = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int MinDeathBringersForSaviour = 2;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int CurrencyStartAmount = 2;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int MinPlayers = 3;
@@ -65,6 +93,10 @@ protected:
 	
 	UPROPERTY(BlueprintReadOnly)
 	TArray<APawn*> DeathBringers;
+	
+	//Actors to delete upon restarting of round
+	UPROPERTY()
+	TArray<AActor*> TransientActors;
 	
 	virtual void OnPlayerLogin(AGameModeBase* GameMode, APlayerController* PC) override;
 	virtual void OnPlayerLogout(AGameModeBase* GameMode, AController* PC) override;

@@ -6,6 +6,7 @@
 #include "MobiusAbilitySystem/Player/MAPlayerController.h"
 #include "BoxelPlayerController.generated.h"
 
+class UDeathBringerItemDataAsset;
 class UInputMappingContext;
 /**
  * 
@@ -23,6 +24,9 @@ public:
 	void ShowSpleefModifierName(const FString& Name);
 	UFUNCTION(BlueprintImplementableEvent)
 	void BP_ShowSpleefModifierName(const FString& Name);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void RequestItemPurchase(const UDeathBringerItemDataAsset* Data);
 	
 protected:
 	virtual void BeginPlay() override;

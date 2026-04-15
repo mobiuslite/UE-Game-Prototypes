@@ -22,7 +22,8 @@ public class Boxel : ModuleRules
 			"GameplayAbilities",
 			"CommonUI", 
 			"AIModule",
-			"GameplayTags"
+			"GameplayTags",
+			"NetCore"
 		});
 
 		// Uncomment if you are using Slate UI

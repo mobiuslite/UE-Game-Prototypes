@@ -9,14 +9,25 @@
 #include "Utility/MobiusUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
+#include "Gameplay/DeathBringer/PowerSwitch.h"
+#include "Gameplay/DeathBringer/WeaponSpawner.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
+#include "Utility/MobiusGameplayTags.h"
 
 ADeathBringerGameMode::ADeathBringerGameMode()
 {
 	GameStateClass = ADeathBringerGameState::StaticClass();
+}
+
+TEnumAsByte<EDeathBringerTeam::Type> ADeathBringerGameMode::TeamIDToTeamEnum(const struct FGenericTeamId& TeamId)
+{
+	if (TeamId.GetId() == NOTEAM_TEAMID) return EDeathBringerTeam::Type::None;
+	
+	return (EDeathBringerTeam::Type)TeamId.GetId();
 }
 
 void ADeathBringerGameMode::BeginPlay()
@@ -49,6 +60,21 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 {
 	SetRoundState(EDeathBringerRoundState::Preparing);
 	GetGameState<ADeathBringerGameState>()->SetRoundEndTime(StartGameWaitTime);
+
+	if (bHardReset)
+	{
+		//Cleans up all remaining players and dead bodies where no controller is posessing them
+		const TArray<ABoxelPlayerCharacter*> PlayerPawns = UMobiusUtils::GetAllActorsOfClassEX<ABoxelPlayerCharacter>(GetWorld(), ABoxelPlayerCharacter::StaticClass());
+		for (int i = 0; i < PlayerPawns.Num(); ++i)
+		{
+			if (ABoxelPlayerCharacter* BoxelCharacter = PlayerPawns[i])
+			{
+				BoxelCharacter->Destroy();
+			}
+		}
+		
+		OnRoundHardResetDelegate.Broadcast();
+	}
 	
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
 	{
@@ -65,29 +91,23 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 			
 			RestartPlayer(PlayerController);
 			
-			if (ABoxelPlayerState* PlayerState = PlayerController->GetPlayerState<ABoxelPlayerState>())
-			{
-				PlayerState->SetGenericTeamId(FGenericTeamId::NoTeam);
-			}
-			
-			if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerController)))
+			if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerController->PlayerState)))
 			{
 				if (!AbilityComp->HasMatchingGameplayTag(TAG_Gameplay_Invincible))
 				{
 					AbilityComp->AddLooseGameplayTag(TAG_Gameplay_Invincible);
 				}
-				
-				AbilityComp->ResetAttributes();
-				AbilityComp->ClearAllAbilities();
 			}
 		}
 	}
 	
 	if (bHardReset)
 	{
-		//TODO: Clear all guns
-	
-		//TODO: Spawn in new guns
+		for (int i = 0; i < TransientActors.Num(); ++i)
+		{
+			if (AActor* Actor = TransientActors[i]) Actor->Destroy();
+		}
+		TransientActors.Empty();
 	}
 	
 	FTimerHandle Handle;
@@ -129,7 +149,23 @@ void ADeathBringerGameMode::StartGame()
 	
 	const int NumDeathBringers = FMath::Clamp(FMath::RoundToInt(DeathBringerRatio), MinDeathBringers, 99);
 	DeathBringers.Append(UMobiusUtils::GetRandomItems<APawn*>(PossibleDeathBringers, NumDeathBringers));
-
+	
+	int RandomSaviourIndex = -1;
+	if (DeathBringers.Num() >= MinDeathBringersForSaviour)
+	{
+		TArray<int> ValidIndices;
+		for (int i = 0; i < AlivePlayers.Num(); ++i)
+		{
+			if (DeathBringers.Contains(AlivePlayers[i]))
+			{
+				continue;
+			}
+			
+			ValidIndices.Add(i);
+		}
+		RandomSaviourIndex = UMobiusUtils::GetRandomItem(ValidIndices);
+	}
+	
 	for (int i = 0; i < AlivePlayers.Num(); ++i)
 	{
 		const APawn* Player = AlivePlayers[i];
@@ -138,12 +174,24 @@ void ADeathBringerGameMode::StartGame()
 		ABoxelPlayerState* PlayerState = Player->GetPlayerState<ABoxelPlayerState>();
 		if (!PlayerState) continue;
 		
-		const int32 TeamId = DeathBringers.Contains(Player) ? DEATHBRINGER_TEAMID : NORMALPLAYER_TEAMID;
+		int32 TeamId = DeathBringers.Contains(Player) ? EDeathBringerTeam::DeathBringer : EDeathBringerTeam::Normal;
+		if (i == RandomSaviourIndex) TeamId = EDeathBringerTeam::Saviour;
+		
 		PlayerState->SetGenericTeamId(FGenericTeamId(TeamId));
 		
 		if (UAbilitySystemComponent* AbilityComp = PlayerState->GetAbilitySystemComponent())
 		{
 			AbilityComp->RemoveLooseGameplayTag(TAG_Gameplay_Invincible);
+		}
+		
+		//None normal player get sum money to spend, yippee!!
+		if (TeamId != EDeathBringerTeam::Normal)
+		{
+			UInventoryComponent* Inventory;
+			if (UMobiusUtils::GetInventory(PlayerState, Inventory))
+			{
+				Inventory->AddResource(TAG_DeathBringer_Currency, CurrencyStartAmount);
+			}
 		}
 	}
 	
@@ -154,8 +202,14 @@ void ADeathBringerGameMode::StartGame()
 
 void ADeathBringerGameMode::EndDeathBringerGame_Implementation(const bool bDeathBringerWin)
 {
-	SetRoundState(EDeathBringerRoundState::End);
-	GetGameState<ADeathBringerGameState>()->SetRoundEndTime(EndGameWaitTime);
+	if (ADeathBringerGameState* State = GetGameState<ADeathBringerGameState>())
+	{
+		if (State->GetRoundState() == EDeathBringerRoundState::End) return;
+		
+		State->SetRoundState(EDeathBringerRoundState::End);
+		State->SetRoundEndTime(EndGameWaitTime);
+		State->ShowRoundEndToast(bDeathBringerWin);
+	} 
 	
 	FTimerHandle Handle;
 	GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([this]()
@@ -196,12 +250,17 @@ void ADeathBringerGameMode::KillPlayer(APawn* Player)
 	}
 }
 
-void ADeathBringerGameMode::SetRoundState(const EDeathBringerRoundState RoundState)
+void ADeathBringerGameMode::AddTransientActor(AActor* Actor)
+{
+	TransientActors.Add(Actor);
+}
+
+void ADeathBringerGameMode::SetRoundState(const EDeathBringerRoundState::Type RoundState)
 {
 	GetGameState<ADeathBringerGameState>()->SetRoundState(RoundState);
 }
 
-EDeathBringerRoundState ADeathBringerGameMode::GetRoundState() const
+EDeathBringerRoundState::Type ADeathBringerGameMode::GetRoundState() const
 {
 	return GetGameState<ADeathBringerGameState>()->GetRoundState();
 }

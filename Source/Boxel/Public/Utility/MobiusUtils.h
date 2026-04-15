@@ -3,13 +3,13 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "EngineUtils.h"
+#include "GenericTeamAgentInterface.h"
 
 #include "MobiusUtils.generated.h"
 
+class UInventoryComponent;
 struct FFloatSpringState;
-/**
- * 
- */
+
 UCLASS()
 class BOXEL_API UMobiusUtils : public UBlueprintFunctionLibrary
 {
@@ -50,9 +50,6 @@ public:
 	{
 		return FMath::Lerp(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds));
 	}
-
-	UFUNCTION(BlueprintCallable, meta=( WorldContext="WorldContextObject"))
-	static void SetInputModeGameEnabled(const UObject* WorldContextObject, const bool bGameOnlyEnabled, const bool bFlushInput);
 	
 	UFUNCTION(BlueprintCallable)
 	static void TickDownFloat(UPARAM(ref) float& Timer, const float DeltaTime, bool& bDone);
@@ -138,4 +135,14 @@ public:
 		}
 		return Result;
 	}
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool GetInventory(const AActor* Actor, UInventoryComponent*& OutInventory);
+	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(DefaultToSelf = "Actor"))
+	static FGenericTeamId GetTeamId(const AActor* Actor);
+	
+	UFUNCTION(BlueprintCallable, meta = (ExpandEnumAsExecs="OutAttitude"))
+	static void GetTeamAttitudeExec(const FGenericTeamId& ThisTeamId, const FGenericTeamId& OtherTeamId, TEnumAsByte<ETeamAttitude::Type>& OutAttitude);
+	UFUNCTION(BlueprintCallable)
+	static ETeamAttitude::Type GetTeamAttitude(const FGenericTeamId& ThisTeamId, const FGenericTeamId& OtherTeamId);
 };

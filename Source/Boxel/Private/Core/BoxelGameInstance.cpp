@@ -5,10 +5,17 @@
 
 #include "SteamToolsSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "SaveSystem/BoxelSaveSubsystem.h"
 
 void UBoxelGameInstance::Init()
 {
 	Super::Init();
+	
+	if (UBoxelSaveSubsystem* SaveSubsystem = GetSubsystem<UBoxelSaveSubsystem>())
+	{
+		SaveSubsystem->LoadGame();
+	}
+	
 	if (USteamToolsSubsystem* SteamSubsystem = GetSubsystem<USteamToolsSubsystem>())
 	{
 		const FSteamworksInitializationResponse Response = SteamSubsystem->InitializeSteamAPI(GetWorld());

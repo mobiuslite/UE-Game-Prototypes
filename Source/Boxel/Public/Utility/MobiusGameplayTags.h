@@ -1,4 +1,6 @@
 #pragma once
 #include "NativeGameplayTags.h"
 
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gun_Bullet_Impact);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gun_Bullet_Impact_Wall);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gun_Bullet_Impact_Blood);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_DeathBringer_Currency);

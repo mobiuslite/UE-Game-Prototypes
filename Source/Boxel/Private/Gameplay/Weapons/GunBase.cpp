@@ -5,9 +5,15 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "ToastSubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Utility/CollisionConsts.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerState.h"
+#include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
+#include "Utility/MobiusUtils.h"
+#include "Widgets/ToastWidget.h"
 
 
 AGunBase::AGunBase()
@@ -48,26 +54,103 @@ float AGunBase::GetFireRate() const
 	return (1.0f / RPM) * 60.0f;
 }
 
+bool AGunBase::GetGunZoomAmount(float& ZoomAmount) const
+{
+	if (!bHasScope) return false;
+	
+	ZoomAmount = ScopeZoomAmount;
+	return true;
+}
+
+void AGunBase::ApplySpread()
+{
+	BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount + SpreadPerBullet, 0.0f, MaxBulletSpread);
+}
+
+float AGunBase::GetTotalBulletSpread() const
+{
+	float Result = BulletSpreadAmount + (AimToastId == INDEX_NONE && bHasScope ? MinSpreadAmount : AimingMinSpreadAmount);
+	if (Holder)
+	{
+		if (const UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(Holder->GetMovementComponent()))
+		{
+			Result += (MovementComp->IsFalling() ? MovementComp->GetMaxSpeed() : MovementComp->Velocity.Length()) * (MovementSpreadMultiplier * 0.01f);
+		}
+	}
+	
+	return Result;
+}
+
+void AGunBase::ConsumeAmmo()
+{
+	CurrentClipAmmo--;
+	OnAmmoChangedDelegate.Broadcast(CurrentClipAmmo, AmmoPerClip);
+}
+
+void AGunBase::StartAiming()
+{
+	if (IsValid(GetAimWidgetClass()))
+	{
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			ToastSubsystem->ShowManualToast(GetAimWidgetClass(), 
+				TEXT(""), FVector2D(0.0f), FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D(0.5f), AimToastId);
+		}
+	}
+}
+
+void AGunBase::EndAiming()
+{
+	if (AimToastId != INDEX_NONE)
+	{
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			ToastSubsystem->HideToast(AimToastId);
+			AimToastId = INDEX_NONE;
+		}
+	}
+}
+
+bool AGunBase::StartReload_Implementation()
+{
+	if (ReloadTimer > 0.0f) return false;
+	if (!Holder) return false;
+	if (CurrentClipAmmo == AmmoPerClip) return false;
+	
+	UInventoryComponent* Inventory;
+	if (!UMobiusUtils::GetInventory(Holder->GetPlayerState(), Inventory)) return false;
+	
+	if (Inventory->GetResourceCount(AmmoResourceTag) == 0) return false;
+	
+	ReloadTimer = ReloadDuration;
+	
+	if (!HasAuthority())
+	{
+		Server_RequestReload();
+	}
+	
+	return true;
+}
+
+void AGunBase::ResetGun()
+{
+	CurrentClipAmmo = AmmoPerClip;
+	ReloadTimer = 0.0f;
+}
+
 void AGunBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(ThisClass, CurrentAmmo);
+	DOREPLIFETIME(ThisClass, CurrentClipAmmo);
 	DOREPLIFETIME(ThisClass, Holder);
+	DOREPLIFETIME(ThisClass, bVisible);
 }
 
 void AGunBase::BeginPlay()
 {
 	Super::BeginPlay();
-}
-
-void AGunBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	Super::EndPlay(EndPlayReason);
-	if (HasAuthority() && Holder)
-	{
-		RemoveHolder(Holder, false);
-	}
+	ResetGun();
 }
 
 void AGunBase::OnRep_Holder()
@@ -76,6 +159,8 @@ void AGunBase::OnRep_Holder()
 	
 	//Disable collision while holding
 	SetPhysicsEnabled(Holder == nullptr);
+	
+	CancelReloading();
 	
 	if (Holder)
 	{
@@ -99,6 +184,41 @@ void AGunBase::OnRep_Holder()
 	}
 }
 
+void AGunBase::OnRep_Visible()
+{
+	SetActorHiddenInGame(!bVisible);
+}
+
+void AGunBase::FinishedReloading_Implementation()
+{
+	UInventoryComponent* Inventory;
+	if (UMobiusUtils::GetInventory(Holder->GetPlayerState<APlayerState>(), Inventory))
+	{
+		Inventory->ConsumeResource(AmmoResourceTag, 1);
+	}
+	
+	CurrentClipAmmo = AmmoPerClip;
+	OnAmmoChangedDelegate.Broadcast(CurrentClipAmmo, AmmoPerClip);
+}
+
+void AGunBase::CancelReloading_Implementation()
+{
+	ReloadTimer = 0.0f;
+}
+
+void AGunBase::Server_RequestReload_Implementation()
+{
+	if (!Holder) return;
+	if (CurrentClipAmmo == AmmoPerClip) return;
+	
+	UInventoryComponent* Inventory;
+	if (!UMobiusUtils::GetInventory(Holder->GetPlayerState(), Inventory)) return;
+	
+	if (Inventory->GetResourceCount(AmmoResourceTag) == 0) return;
+	
+	ReloadTimer = ReloadDuration;
+}
+
 void AGunBase::SetPhysicsEnabled(const bool bEnabled)
 {
 	SetActorEnableCollision(bEnabled);
@@ -119,6 +239,7 @@ void AGunBase::Tick(float DeltaTime)
 		if (Timer <= 0.0f)
 		{
 			HolderHistory.RemoveAt(i);
+			GunMesh->ClearMoveIgnoreActors();
 		}
 		else
 		{
@@ -129,50 +250,108 @@ void AGunBase::Tick(float DeltaTime)
 			i++;
 		}
 	}
+	
+	if (BulletSpreadAmount > 0.0f)
+	{
+		BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount - (DeltaTime * SpreadReductionPerSecond), 0.0f, MaxBulletSpread);
+	}
+	
+	if (ReloadTimer > 0.0f)
+	{
+		ReloadTimer -= DeltaTime;
+		if (ReloadTimer <= 0.0f)
+		{
+			FinishedReloading();
+		}
+	}
 }
 
-void AGunBase::SetHolder(APawn* HolderPawn)
+void AGunBase::OnEquip(AController* HolderController)
 {
-	if (!HasAuthority()) return;
-	
-	if (!HolderPawn)
+	if (HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("GunBase: NO HOLDER GIVEN. Please pass a valid holder. If you're trying to remove the holder, use RemoveHolder"));
-		return;
+		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
+		{
+			AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
+		}
 	}
 	
-	UE_LOG(LogTemp, Display, TEXT("Setting holder of gun"));
-	
-	this->Holder = HolderPawn;
-	OnRep_Holder();
-		
-	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Holder))
-	{
-		AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
-	}
+	bVisible = true;
+	OnRep_Visible();
 }
 
-void AGunBase::RemoveHolder(const APawn* HolderPawn, const bool bThrow)
+void AGunBase::OnUnequip(AController* HolderController)
+{
+	if (HasAuthority())
+	{
+		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
+		{
+			AbilityComp->ClearAllAbilitiesWithInputID(1);
+		}
+	}
+	
+	bVisible = false;
+	OnRep_Visible();
+	
+	EndAiming();
+	CancelReloading();
+}
+
+void AGunBase::OnAddedToInventory(const UInventoryComponent* Inventory, AController* HolderController)
+{
+	this->Holder = HolderController->GetPawn();
+	OnRep_Holder();
+	
+	bVisible = false;
+	OnRep_Visible();
+}
+
+void AGunBase::OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController)
 {
 	UE_LOG(LogTemp, Display, TEXT("Removing holder from gun"));
 	
+	APawn* HolderPawn = HolderController->GetPawn();
+	if (HolderPawn)
+	{
+		FHolderHistoryData History;
+		History.PreviousHolder = HolderPawn;
+		History.HeldCooldownTimer = 0.5f;
+		
+		HolderHistory.Add(History);
+		
+		GunMesh->IgnoreActorWhenMoving(HolderPawn, true);
+	}
+	
 	this->Holder = nullptr;
 	OnRep_Holder();
-		
-	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderPawn))
-	{
-		AbilityComp->ClearAllAbilitiesWithInputID(1);
-	}
-		
-	FHolderHistoryData History;
-	History.PreviousHolder = HolderPawn;
-	History.HeldCooldownTimer = 0.5f;
-		
-	HolderHistory.Add(History);
-		
-	if (bThrow)
+	
+	bVisible = true;
+	OnRep_Visible();
+	
+	//TODO: Don't throw on killed death
+	if (HolderPawn)
 	{
 		GunMesh->AddImpulse(HolderPawn->GetBaseAimRotation().Vector() * DropImpulseStrength, NAME_None, true);
 	}
+}
+
+bool AGunBase::CanUseGun() const
+{
+	return ReloadTimer <= 0.0f && CurrentClipAmmo > 0;
+}
+
+bool AGunBase::IsLocallyHeldGun() const
+{
+	bool bResult = false;
+	
+	if (Holder)
+	{
+		if (const AController* HolderController = Holder->GetController())
+		{
+			bResult = HolderController->IsLocalController();
+		}
+	}
+	
+	return bResult;
 }
 

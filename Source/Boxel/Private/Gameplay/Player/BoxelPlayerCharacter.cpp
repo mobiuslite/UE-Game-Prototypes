@@ -2,17 +2,25 @@
 #include "Boxel/Public/Gameplay/Player/BoxelPlayerCharacter.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Boxel/Public/Gameplay/Player/Movement/BoxelPlayerMovementComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputMappingContext.h"
+#include "ToastSubsystem.h"
+#include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Core/GameHUD.h"
 #include "Core/MobiusGameMode.h"
+#include "Core/DeathBringer/DeathBringerGameMode.h"
+#include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Gameplay/Weapons/GunBase.h"
+#include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 #include "Net/UnrealNetwork.h"
+#include "SaveSystem/BoxelSaveSubsystem.h"
 #include "Utility/CollisionConsts.h"
 #include "Utility/MobiusUtils.h"
+#include "Widgets/ToastWidget.h"
 
 ABoxelPlayerCharacter::ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxelPlayerMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -54,16 +62,122 @@ FRotator ABoxelPlayerCharacter::GetViewRotation() const
 void ABoxelPlayerCharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
 	const bool bIsDead)
 {
-	Super::Client_OnDamageTaken_Implementation(DamageInstigator, DamageCauser, bIsDead);
+	BP_LocalOnTakeDamage(DamageInstigator, DamageCauser);
+	
+	if (bIsDead)
+	{
+		OnAimReleased();
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			ToastSubsystem->HideToast(PreviewToastId);
+			ToastSubsystem->HideToast(InteractToastId);
+		}
+	}
 }
 
-void ABoxelPlayerCharacter::Server_OnPlayerDead()
+void ABoxelPlayerCharacter::Server_OnPlayerDead(const FHitResult& Hit, const AActor* Causer)
 {
 	AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>();
 	if (!GameMode) return;
 	
+	DropAllItems();
+	
+	DeadPlayerInfo.KillshotInfo = Hit;
+	DeadPlayerInfo.KilledByWeaponName = Causer->GetName();
+	if (const ABoxelPlayerState* BoxelPlayerState = GetPlayerState<ABoxelPlayerState>())
+	{
+		DeadPlayerInfo.TeamId = BoxelPlayerState->GetGenericTeamId();
+		DeadPlayerInfo.PlayerName = BoxelPlayerState->GetPlayerName();
+	}
+	
 	GameMode->KillPlayer(this);
-	this->Destroy();
+	EnableRagdoll(Hit);
+}
+
+void ABoxelPlayerCharacter::EnableRagdoll_Implementation(const FHitResult& Hit)
+{
+	if (bIsRagdoll) return;
+	bIsRagdoll = true;
+	
+	USkeletalMeshComponent* RagdollMesh = GetMesh();
+	if (!RagdollMesh) return;
+	
+	GetCharacterMovement()->DisableMovement();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::Type::NoCollision);
+	
+	const FVector ShotDirection = (Hit.TraceEnd - Hit.TraceStart).GetSafeNormal();
+	
+	RagdollMesh->SetSimulatePhysics(true);
+	
+	const FVector PushbackVelocity = ShotDirection * RagdollPushbackStrength;
+	RagdollMesh->SetAllPhysicsLinearVelocity(GetVelocity() + PushbackVelocity);
+
+	const FVector Origin = RagdollMesh->GetComponentLocation();
+	const FVector DistanceFromOrigin = Hit.Location - Origin;
+	
+	float RotationStrength = 0.25f;
+	
+	if (DistanceFromOrigin.Z > HeadshotHeight)
+	{
+		RotationStrength = 1.0f;
+	}
+	else if (DistanceFromOrigin.Z < LegShotHeight)
+	{
+		RotationStrength = -0.5f;
+	}
+	
+	const FVector RotateVelocity = ShotDirection.Cross(-FVector::UpVector) * RagdollRotationStrength * RotationStrength;
+	RagdollMesh->SetAllPhysicsAngularVelocityInRadians(RotateVelocity);
+	
+	RagdollMesh->SetCollisionProfileName(FName("Ragdoll"));
+}
+
+void ABoxelPlayerCharacter::OnRep_IsRagdoll()
+{
+	EnableRagdoll(FHitResult());
+}
+
+bool ABoxelPlayerCharacter::CanInteract_Implementation() const
+{
+	return GetPlayerState() == nullptr;
+}
+
+void ABoxelPlayerCharacter::Interact_Implementation(APawn* Caller)
+{
+	if (HasAuthority())
+	{
+		if (ABoxelPlayerCharacter* Player = Cast<ABoxelPlayerCharacter>(Caller))
+		{
+			FDeadPlayerInfo PlayerInfo = DeadPlayerInfo;
+			
+			//Only saviours get full death info
+			if (UMobiusUtils::GetTeamId(Caller)!= EDeathBringerTeam::Saviour)
+			{
+				PlayerInfo.KillshotInfo = FHitResult();
+				PlayerInfo.KilledByWeaponName = "";
+			}
+			
+			Player->Client_ShowDeadPlayerInfo(PlayerInfo);
+		}
+	}
+}
+
+FText ABoxelPlayerCharacter::GetInteractPreviewString_Implementation() const
+{
+	//TODO: Localize and keybind
+	const FString String = TEXT("Press E to investigate body");
+	return FText::FromString(String);
+}
+
+void ABoxelPlayerCharacter::Server_PlayerInteracted_Implementation(UObject* Interactable)
+{
+	if (Interactable && Interactable->Implements<UInteractable>())
+	{
+		if (IInteractable::Execute_CanInteract(Interactable))
+		{
+			IInteractable::Execute_Interact(Interactable, this);
+		}
+	}
 }
 
 void ABoxelPlayerCharacter::BeginPlay()
@@ -74,8 +188,7 @@ void ABoxelPlayerCharacter::BeginPlay()
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.bNoFail = true;
-		AGunBase* NewGun = GetWorld()->SpawnActor<AGunBase>(StartingGunClass, SpawnParams);
-		PickUpGun(NewGun);
+		PickUpItem(TScriptInterface<IInventoryItem>(GetWorld()->SpawnActor<AActor>(StartingGunClass, SpawnParams)));
 	}
 	
 	if (const USkeletalMeshComponent* MeshComp = GetMesh())
@@ -91,9 +204,10 @@ void ABoxelPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
 	
-	if (HasAuthority())
+	if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
 	{
-		DropHeldGun(false);
+		ToastSubsystem->HideToast(PreviewToastId);
+		ToastSubsystem->HideToast(InteractToastId);
 	}
 }
 
@@ -108,6 +222,9 @@ void ABoxelPlayerCharacter::Tick(float DeltaTime)
 			TimeSpentInAir += DeltaTime;
 		}
 	}
+	
+	DoPlayerPreviewTrace();
+	DoInteractTrace();
 }
 
 //Servers on player state ready
@@ -142,56 +259,313 @@ void ABoxelPlayerCharacter::OnRep_PlayerState()
 	}
 }
 
-void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void ABoxelPlayerCharacter::OnAimPressed_Implementation()
 {
-	if (HeldGun) return;
-	if (!HasAuthority()) return;
-	
-	if (AGunBase* Gun = Cast<AGunBase>(OtherActor))
+	float BaseFOV = 90.0f;
+	if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
 	{
-		if (!Gun->CanBePickedUp(this)) return;
-		PickUpGun(Gun);
+		BaseFOV = SaveSubsystem->GetFOV();
+	}
+	
+	if (AGunBase* Gun = Cast<AGunBase>(HeldItem.GetObject()))
+	{
+		if (Gun->GetGunZoomAmount(CurrentZoomAmount))
+		{
+			if (UCameraComponent* Camera = Cast<UCameraComponent>(GetComponentByClass(UCameraComponent::StaticClass())))
+			{
+				Camera->SetFieldOfView(BaseFOV / CurrentZoomAmount);
+			}
+		}
+		
+		Gun->StartAiming();
 	}
 }
 
-void ABoxelPlayerCharacter::PickUpGun(AGunBase* Gun)
+void ABoxelPlayerCharacter::OnAimReleased_Implementation()
 {
-	if (!Gun) return;
+	float BaseFOV = 90.0f;
+	if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
+	{
+		BaseFOV = SaveSubsystem->GetFOV();
+	}
+	
+	CurrentZoomAmount = 0.0f;
+	
+	if (UCameraComponent* Camera = Cast<UCameraComponent>(GetComponentByClass(UCameraComponent::StaticClass())))
+	{
+		Camera->SetFieldOfView(BaseFOV);
+	}
+	
+	if (AGunBase* Gun = Cast<AGunBase>(HeldItem.GetObject()))
+	{
+		Gun->EndAiming();
+	}
+}
+
+void ABoxelPlayerCharacter::OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+                                         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
 	if (!HasAuthority()) return;
 	
-	HeldGun = Gun;
-	HeldGun->SetHolder(this);
+	if (OtherActor->Implements<UInventoryItem>())
+	{
+		TScriptInterface<IInventoryItem> Item = TScriptInterface<IInventoryItem>(OtherActor);
+		ensure(Item);
+		
+		if (!Item->CanBePickedUp(this)) return;
+		PickUpItem(Item);
+	}
+}
+
+bool ABoxelPlayerCharacter::PickUpItem(const TScriptInterface<IInventoryItem>& Item, const bool bConceal)
+{
+	if (!Item) return false;
+	if (!HasAuthority()) return false;
 	
-	OnRep_HeldGun(nullptr);
+	UInventoryComponent* Inventory;
+	if (!UMobiusUtils::GetInventory(GetPlayerState(), Inventory)) return false;
+	
+	const bool bSuccess = Inventory->AddItem(Item);
+	if (bSuccess && Inventory->GetItemCount() == 1 && !bConceal)
+	{
+		Item->OnEquip(GetController());
+		HeldItem = Item;
+		OnRep_HeldItem(nullptr);
+	}
+	
+	return bSuccess;
+}
+
+void ABoxelPlayerCharacter::DropAllItems()
+{
+	if (!HasAuthority()) return;
+	
+	const TScriptInterface<IInventoryItem> PreviousGun = HeldItem;
+	HeldItem = TScriptInterface<IInventoryItem>(nullptr);
+	
+	UInventoryComponent* Inventory;
+	if (UMobiusUtils::GetInventory(GetPlayerState(), Inventory))
+	{
+		while (Inventory->GetItemCount() != 0)
+		{
+			TScriptInterface<IInventoryItem> Item = Inventory->GetItemByIndex(0);
+			Inventory->RemoveItem(Item);
+		}
+	}
+	
+	OnRep_HeldItem(PreviousGun);
 }
 
 void ABoxelPlayerCharacter::DropHeldGun_Implementation(const bool bThrow)
 {
-	if (!HeldGun) return;
+	if (!HeldItem.GetObject()) return;
 	if (!HasAuthority()) return;
-	if (!HeldGun->IsDroppable()) return;
 	
-	HeldGun->RemoveHolder(this, bThrow);
+	const TScriptInterface<IInventoryItem> PreviousItem = HeldItem;
+	HeldItem = TScriptInterface<IInventoryItem>(nullptr);
 	
-	const AGunBase* PreviousGun = HeldGun;
-	HeldGun = nullptr;
-	OnRep_HeldGun(PreviousGun);
+	PreviousItem->OnUnequip(GetController());
+	
+	UInventoryComponent* Inventory;
+	if (UMobiusUtils::GetInventory(GetPlayerState(), Inventory))
+	{
+		Inventory->RemoveItem(PreviousItem);
+	}
+	
+	OnRep_HeldItem(PreviousItem);
 }
 
-void ABoxelPlayerCharacter::OnRep_HeldGun(const AGunBase* LastGun)
+void ABoxelPlayerCharacter::OnRep_HeldItem(const TScriptInterface<IInventoryItem>& LastGun)
 {
-	if (HeldGun)
+	if (HeldItem.GetObject())
 	{
+		const AGunBase* HeldGun = Cast<AGunBase>(HeldItem.GetObject());
+		
 		if (const TSubclassOf<UAnimInstance> GunABP = HeldGun->GetGunAnimInstanceClass())
 		{
 			GetMesh()->SetAnimInstanceClass(GunABP);
 		}
+		
+		if (const ABoxelPlayerState* BoxelState = GetPlayerState<ABoxelPlayerState>())
+		{
+			BoxelState->BroadcastGunEquipped(HeldGun);
+		}
+	}
+	else
+	{
+		AGunBase* LastGunBase = nullptr;
+		if (LastGun.GetObject())
+		{
+			LastGunBase = Cast<AGunBase>(LastGun.GetObject());
+		}
+		
+		GetMesh()->SetAnimInstanceClass(OriginalAnimInstanceClass);
+		
+		if (const ABoxelPlayerState* BoxelState = GetPlayerState<ABoxelPlayerState>())
+		{
+			BoxelState->BroadcastGunUnequipped(LastGunBase);
+		}
+	}
+}
+
+void ABoxelPlayerCharacter::SetHeldItemIndex(int Index)
+{
+	UInventoryComponent* Inventory;
+	if (UMobiusUtils::GetInventory(GetPlayerState(), Inventory))
+	{
+		if (Inventory->GetItemCount() == 0) return;
+		
+		if (Index < -1)
+		{
+			Index = Inventory->GetItemCount() - 1;
+		}
+		else if (Index >= Inventory->GetItemCount())
+		{
+			Index = -1;
+		}
+		
+		const TScriptInterface<IInventoryItem> OldItem = HeldItem;
+		HeldItem = Inventory->GetItemByIndex(Index);
+		
+		if (OldItem.GetObject())
+		{
+			OldItem->OnUnequip(GetController());
+		}
+		
+		if (HeldItem.GetObject())
+		{
+			HeldItem->OnEquip(GetController());
+		}
+		
+		OnRep_HeldItem(OldItem);
+		
+		if (!HasAuthority())
+		{
+			Server_SetHeldItemIndex(Index);
+		}
+	}
+}
+
+void ABoxelPlayerCharacter::Server_SetHeldItemIndex_Implementation(const int Index)
+{
+	SetHeldItemIndex(Index);
+}
+
+void ABoxelPlayerCharacter::DoPlayerPreviewTrace()
+{
+	APlayerController* PlayerController = GetController<APlayerController>();
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
 	}
 	
-	if (LastGun)
+	FVector StartLocation;
+	FVector EndLocation;
+	UMobiusUtils::GetCameraControlTraceLocation(PlayerController, PreviewPlayerInfoDistance, StartLocation, EndLocation);
+		
+	const FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(PlayerPreviewTrace), false, this);
+		
+	//Show widget that shows player's name and approximate HP
+	FHitResult HitResult;
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_WeaponTrace, TraceParams))
 	{
-		GetMesh()->SetAnimInstanceClass(OriginalAnimInstanceClass);
+		if (PreviewToastId != -1 || !IsValid(PreviewPlayerToastClass)) return;
+		
+		const ACharacter* HitCharacter = Cast<ACharacter>(HitResult.GetActor());
+		if (!HitCharacter) return;
+		
+		const APlayerState* HitPlayerState = HitCharacter->GetPlayerState<APlayerState>();
+		if (!HitPlayerState) return;
+		
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			int PlayerHealthPercent = 100;
+			if (const UAbilitySystemComponent* HitAbilityComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitPlayerState))
+			{
+				const float CurrentHealth = HitAbilityComponent->GetNumericAttribute(UMACommonAttributeSet::GetCurrentHealthAttribute());
+				const float MaxHealth = HitAbilityComponent->GetNumericAttribute(UMACommonAttributeSet::GetMaxHealthAttribute());
+				
+				PlayerHealthPercent = FMath::RoundToInt(CurrentHealth / MaxHealth * 100);
+			}
+			
+			const FString PlayerToastMsg = FString::Printf(TEXT("%s:%d"), *HitPlayerState->GetPlayerName(), PlayerHealthPercent);
+			
+			ToastSubsystem->ShowManualToast(PreviewPlayerToastClass, PlayerToastMsg, 
+				FVector2D(0.0f, 50.0f), FAnchors(0.5f), FVector2D(0.5f), PreviewToastId);
+		}
+	}
+	else
+	{
+		if (PreviewToastId == -1) return;
+		
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			ToastSubsystem->HideToast(PreviewToastId);
+			PreviewToastId = -1;
+		}
+	}
+}
+
+void ABoxelPlayerCharacter::Client_ShowDeadPlayerInfo_Implementation(const FDeadPlayerInfo& Info)
+{
+	BP_ShowDeadPlayerInfo(Info);
+}
+
+void ABoxelPlayerCharacter::DoInteractTrace()
+{
+	APlayerController* PlayerController = GetController<APlayerController>();
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+	
+	FVector StartLocation;
+	FVector EndLocation;
+	UMobiusUtils::GetCameraControlTraceLocation(PlayerController, PlayerInteractDistance, StartLocation, EndLocation);
+		
+	const FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(InteractTrace), false, this);
+	
+	FHitResult HitResult;
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_InteractableTrace, TraceParams))
+	{
+		if (!HitResult.GetActor()) return;
+		if (!HitResult.GetActor()->Implements<UInteractable>()) return;
+		if (CurrentInteractable.GetObject() == HitResult.GetActor()) return;
+		
+		const TScriptInterface<IInteractable> Interactable = TScriptInterface<IInteractable>(HitResult.GetActor());
+		if (!IInteractable::Execute_CanInteract(Interactable.GetObject())) return;
+		
+		CurrentInteractable = Interactable;
+		
+		if (!IsValid(PreviewPlayerToastClass)) return;
+		
+		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+		{
+			if (InteractToastId != -1)
+			{
+				ToastSubsystem->HideToast(InteractToastId);
+			}
+				
+			ToastSubsystem->ShowManualToast(InteractToastClass, 
+				IInteractable::Execute_GetInteractPreviewString(Interactable.GetObject()).ToString(), 
+				FVector2D(0.0f, 100.0f), FAnchors(0.5f), FVector2D(0.5f), InteractToastId);
+		}
+	}
+	else
+	{
+		if (IsValid(CurrentInteractable.GetObject()))
+		{
+			CurrentInteractable = TScriptInterface<IInteractable>(nullptr);
+		}
+		
+		if (InteractToastId != -1)
+		{
+			if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
+			{
+				ToastSubsystem->HideToast(InteractToastId);
+				InteractToastId = -1;
+			}
+		}
 	}
 }
 
@@ -209,6 +583,14 @@ void ABoxelPlayerCharacter::OnTriggerPressed_Implementation()
 	{
 		AbilityComp->PressInputID(1);
 	} 
+	
+	if (AGunBase* HeldGun = Cast<AGunBase>(HeldItem.GetObject()))
+	{
+		if (HeldGun && HeldGun->GetAmmoCount() == 0)
+		{
+			HeldGun->StartReload();
+		}
+	}
 }
 
 void ABoxelPlayerCharacter::Landed(const FHitResult& Hit)
@@ -246,7 +628,19 @@ void ABoxelPlayerCharacter::MoveInput(const FInputActionValue& Value)
 
 void ABoxelPlayerCharacter::LookInput(const FInputActionValue& Value)
 {
-	const FVector2D MouseInput = Value.Get<FVector2D>();
+	float MouseSens = 1.0f;
+	if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
+	{
+		MouseSens = SaveSubsystem->GetMouseSensitivity();
+	}
+	
+	if (CurrentZoomAmount > 0.0f)
+	{
+		MouseSens /= CurrentZoomAmount; 
+	}
+	
+	const FVector2D MouseInput = Value.Get<FVector2D>() * MouseSens;
+	
 	AddControllerYawInput(MouseInput.X);
 	AddControllerPitchInput(-MouseInput.Y);
 }
@@ -271,15 +665,72 @@ void ABoxelPlayerCharacter::FireInput_Released(const FInputActionValue& Value)
 	OnTriggerReleased();
 }
 
+void ABoxelPlayerCharacter::AimInput(const FInputActionValue& Value)
+{
+	OnAimPressed();
+}
+
+void ABoxelPlayerCharacter::AimInput_Released(const FInputActionValue& Value)
+{
+	OnAimReleased();
+}
+
 void ABoxelPlayerCharacter::DropInput(const FInputActionValue& Value)
 {
+	OnAimReleased();
 	DropHeldGun();
-	
-	//Client prediction
-	if (HeldGun)
+
+	if (!HasAuthority())
 	{
-		HeldGun->RemoveHolder(this, true);
+		//Client prediction
+		if (AGunBase* HeldGun = Cast<AGunBase>(HeldItem.GetObject()))
+		{
+			if (HeldGun)
+			{
+				UInventoryComponent* Inventory;
+				if (!UMobiusUtils::GetInventory(GetPlayerState(), Inventory)) return;
+	
+				Inventory->RemoveItem(TScriptInterface<IInventoryItem>(HeldGun));
+			}
+		}
 	}
+}
+
+void ABoxelPlayerCharacter::InteractInput(const FInputActionValue& Value)
+{
+	if (UObject* Interactable = CurrentInteractable.GetObject())
+	{
+		IInteractable::Execute_Interact(Interactable, this);
+		if (!HasAuthority())
+		{
+			Server_PlayerInteracted(Interactable);
+		}
+	}
+}
+
+void ABoxelPlayerCharacter::ReloadInput(const FInputActionValue& Value)
+{
+	if (AGunBase* HeldGun = Cast<AGunBase>(HeldItem.GetObject()))
+	{
+		if (HeldGun)
+		{
+			HeldGun->StartReload();
+		}
+	}
+}
+
+void ABoxelPlayerCharacter::ScrollInventoryInput(const FInputActionValue& Value)
+{
+	const bool bScrollDirection = Value.Get<float>() > 0.0f;
+	
+	UInventoryComponent* Inventory;
+	if (UMobiusUtils::GetInventory(GetPlayerState(), Inventory))
+	{
+		const int CurrentIndex = Inventory->GetIndexOfItem(HeldItem);
+		SetHeldItemIndex(CurrentIndex + (bScrollDirection ? 1 : -1));
+	}
+	
+	OnAimReleased();
 }
 
 void ABoxelPlayerCharacter::TalkInput(const FInputActionValue& Value)
@@ -326,7 +777,14 @@ void ABoxelPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::FireInput);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ABoxelPlayerCharacter::FireInput_Released);
 		
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::AimInput);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &ABoxelPlayerCharacter::AimInput_Released);
+		
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::DropInput);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::InteractInput);
+		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::ReloadInput);
+		
+		EnhancedInputComponent->BindAction(ScrollInventoryAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::ScrollInventoryInput);
 		
 		EnhancedInputComponent->BindAction(PushToTalkAction, ETriggerEvent::Started, this, &ABoxelPlayerCharacter::TalkInput);
 		EnhancedInputComponent->BindAction(PushToTalkAction, ETriggerEvent::Completed, this, &ABoxelPlayerCharacter::TalkInput_Released);
@@ -340,6 +798,6 @@ void ABoxelPlayerCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimePro
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, bTalking);
-	DOREPLIFETIME(ThisClass, HeldGun);
+	DOREPLIFETIME(ThisClass, HeldItem);
 }
 

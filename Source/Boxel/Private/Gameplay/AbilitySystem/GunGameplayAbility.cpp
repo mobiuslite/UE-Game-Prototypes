@@ -19,10 +19,8 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
                                           const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
                                           const FGameplayEventData* TriggerEventData)
 {
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-	
 	AGunBase* Gun = GetGunActor();
-	if (!Gun)
+	if (!Gun || !Gun->CanUseGun())
 	{			
 		constexpr bool bReplicateEndAbility = true;
 		constexpr bool bWasCancelled = true;
@@ -30,7 +28,12 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 		return;
 	}
 	
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	
 	FireGun(Gun);
+	
+	Gun->ApplySpread();
+	Gun->ConsumeAmmo();
 	
 	GetWorld()->GetTimerManager().SetTimer(TimerHandle, this, &ThisClass::OnAutoTimerComplete, Gun->GetFireRate(), false);
 }
@@ -53,22 +56,37 @@ void UGunGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, co
 	}
 }
 
-//TODO: Make Semi auto only fire after waiting the timer and input is released
 void UGunGameplayAbility::InputReleased(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo)
 {
-	K2_EndAbility();
+	if (!TimerHandle.IsValid())
+	{
+		K2_EndAbility();
+	}
 }
 
 void UGunGameplayAbility::OnAutoTimerComplete()
 {
+	//Default to end ability, in case it gets stuck
+	bool bEndAbility = true;
+	
+	const bool bInputPressed = GetCurrentAbilitySpec()->InputPressed;
+	
+	//Ability won't end for semi automatic guns until the input is released
 	if (const AGunBase* Gun = GetGunActor())
 	{
-		if (Gun->IsFullyAutomatic())
+		if (!Gun->IsFullyAutomatic() && bInputPressed)
 		{
-			K2_EndAbility();
+			bEndAbility = false;
 		}
 	}
+	
+	if (bEndAbility)
+	{
+		K2_EndAbility();
+	}
+	
+	GetWorld()->GetTimerManager().ClearTimer(TimerHandle);
 }
 
 AGunBase* UGunGameplayAbility::GetGunActor() const
@@ -79,5 +97,5 @@ AGunBase* UGunGameplayAbility::GetGunActor() const
 	const ABoxelPlayerCharacter* BoxelPlayer = OwningActor->GetPawn<ABoxelPlayerCharacter>();
 	if (!BoxelPlayer) return nullptr;
 	
-	return BoxelPlayer->GetHeldGun();
+	return Cast<AGunBase>(BoxelPlayer->GetHeldItem().GetObject());
 }

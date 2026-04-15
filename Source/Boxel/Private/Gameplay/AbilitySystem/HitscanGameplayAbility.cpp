@@ -5,9 +5,13 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "GameplayCueFunctionLibrary.h"
 #include "Gameplay/Weapons/GunBase.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/CollisionConsts.h"
 #include "Utility/MobiusCvars.h"
 #include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
@@ -46,7 +50,6 @@ void UHitscanGameplayAbility::StartRangedWeaponTargeting()
 
 	TArray<FHitResult> FoundHits = PerformLocalTargeting();
 
-
 	FGameplayAbilityTargetDataHandle TargetData;
 	if (FoundHits.Num() > 0)
 	{
@@ -59,39 +62,62 @@ void UHitscanGameplayAbility::StartRangedWeaponTargeting()
 		}
 	}
 
-	// Process the target data immediately
-	OnTargetDataReadyCallback(TargetData, FGameplayTag());
+	if (IsLocallyControlled())
+	{
+		// Process the target data immediately
+		OnTargetDataReadyCallback(TargetData, FGameplayTag());
+	}
 }
 
 void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
 {
-	//Muzzle Cue
-	if (const AGunBase* Gun = GetGunActor())
+	if (AGunBase* Gun = GetGunActor())
 	{
+		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, 0);
+		//Muzzle Cue
 		FGameplayCueParameters Params;
 		Params.TargetAttachComponent = Gun->GetMuzzleComponent();
 		Params.Location = Gun->GetMuzzleComponent()->GetComponentLocation();
 		Params.Instigator = GetAvatarActorFromActorInfo();
+		Params.Normal = (HitResult.TraceEnd - Gun->GetMuzzleComponent()->GetComponentLocation()).GetSafeNormal();
 		
-		K2_ExecuteGameplayCueWithParams(Gun->GetFireCueTag(), Params);
+		if (IsLocallyControlled() && !HasAuthority(&CurrentActivationInfo))
+		{
+			if (UMobiusAbilitySystemComponent* AbilityComponent = Cast<UMobiusAbilitySystemComponent>(GetAbilitySystemComponentFromActorInfo()))
+			{
+				AbilityComponent->ExecuteGameplayCueLocal(Gun->GetFireCueTag(), Params);
+			}
+		}
+		else
+		{
+			K2_ExecuteGameplayCueWithParams(Gun->GetFireCueTag(), Params);
+		}
+		
+		//Damage
+		const TSubclassOf<UGameplayEffect> DamageClass = Gun->GetDamageEffectClass();
+		if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
+		{
+			FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass, HitResult, Gun);
+			K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
+		}
 	}
 	
-	//Impact cue
+	//Wall Impact cue
 	const int32 DataCount = UAbilitySystemBlueprintLibrary::GetDataCountFromTargetData(TargetData);
 	for (int i = 0; i < DataCount; ++i)
 	{
 		const FHitResult HitResult = UAbilitySystemBlueprintLibrary::GetHitResultFromTargetData(TargetData, i);
-		if (HitResult.bBlockingHit)
+		if (HitResult.bBlockingHit && HitResult.GetActor())
 		{
-			const FGameplayCueParameters Params = UGameplayCueFunctionLibrary::MakeGameplayCueParametersFromHitResult(HitResult);
-			K2_ExecuteGameplayCueWithParams(TAG_Gun_Bullet_Impact, Params);
+			if (!HitResult.GetActor()->IsA(APawn::StaticClass()))
+			{
+				FGameplayCueParameters Params = UGameplayCueFunctionLibrary::MakeGameplayCueParametersFromHitResult(HitResult);
+				Params.Location = HitResult.Location;
+				Params.Normal = HitResult.Normal;
+			
+				K2_ExecuteGameplayCueWithParams(TAG_Gun_Bullet_Impact_Wall, Params);
+			}
 		}
-	}
-	
-	if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
-	{
-		const FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass);
-		K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
 	}
 }
 
@@ -145,6 +171,12 @@ TArray<FHitResult> UHitscanGameplayAbility::PerformLocalTargeting()
 		
 		InputData.AimDir = (InputData.EndTrace - InputData.StartTrace).GetSafeNormal();
 
+		if (const AGunBase* Gun = GetGunActor())
+		{
+			InputData.AimDir = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(InputData.AimDir, Gun->GetTotalBulletSpread() * 0.5f);
+			InputData.EndTrace = InputData.StartTrace + (InputData.AimDir * Range);
+		}
+		
 		TraceBulletsInCartridge(InputData,Results);
 	}
 	
@@ -216,16 +248,14 @@ FHitResult UHitscanGameplayAbility::WeaponTrace(const FVector& StartTrace, const
 	TraceParams.bReturnPhysicalMaterial = true;
 	AddAdditionalTraceIgnoreActors(TraceParams);
 	//TraceParams.bDebugQuery = true;
-
-	const ECollisionChannel TraceChannel = ECC_Pawn;
-
+	
 	if (SweepRadius > 0.0f)
 	{
-		GetWorld()->SweepMultiByChannel(HitResults, StartTrace, EndTrace, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(SweepRadius), TraceParams);
+		GetWorld()->SweepMultiByChannel(HitResults, StartTrace, EndTrace, FQuat::Identity, ECC_WeaponTrace, FCollisionShape::MakeSphere(SweepRadius), TraceParams);
 	}
 	else
 	{
-		GetWorld()->LineTraceMultiByChannel(HitResults, StartTrace, EndTrace, TraceChannel, TraceParams);
+		GetWorld()->LineTraceMultiByChannel(HitResults, StartTrace, EndTrace, ECC_WeaponTrace, TraceParams);
 	}
 
 	FHitResult Hit(ForceInit);
