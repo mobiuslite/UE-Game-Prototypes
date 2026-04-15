@@ -46,6 +46,10 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		const AActor* SourceCauser = Context.GetEffectCauser();
 		
 		float FinalDamage = BaseDamageDone;
+		if (const UPhysicalMaterial* PhysMat = HitResult.PhysMaterial.Get())
+		{
+			FinalDamage *= PhysMat->DamageModifier.DamageThresholdMultiplier;
+		}
 		
 		if (const UAbilitySystemComponent* TargetAbilityComponent = TargetActor->GetAbilitySystemComponent())
 		{
@@ -64,7 +68,7 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			
 			SetCurrentHealth(NewHealth);
 
-			OnHealthChanged.Broadcast(FinalDamage, OldHealth, NewHealth);
+			OnHealthChanged.Broadcast(-FinalDamage, OldHealth, NewHealth);
 			
 			const AController* Instigator = Cast<AController>(SourceInstigator);
 			if (!Instigator)
@@ -76,7 +80,39 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			TargetActor->Client_OnDamageTaken(Instigator, SourceCauser, bIsDead);
 			if (bIsDead)
 			{
-				TargetActor->Server_OnPlayerDead();
+				TargetActor->Server_OnPlayerDead(HitResult, SourceCauser);
+			}
+		}
+	}
+	else if (Data.EvaluatedData.Attribute == GetHealAmountAttribute())
+	{
+		const float BaseHealAmount = GetHealAmount();
+		SetHealAmount(0.0f);
+		
+		AMACharacter* TargetActor = nullptr;
+		if (Data.Target.AbilityActorInfo.IsValid())
+		{
+			TargetActor = Cast<AMACharacter>(Data.Target.AbilityActorInfo->AvatarActor.Get());
+		}
+		
+		if (!TargetActor)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Target actor is null when trying to apply healing"));
+			return;
+		}
+		
+		if (BaseHealAmount > 0.0f)
+		{	
+			UE_LOG(LogTemp, Log, TEXT("Healed amount: %f"), BaseHealAmount);
+
+			const float OldHealth = GetCurrentHealth();
+			const float NewHealth = FMath::Clamp(OldHealth + BaseHealAmount, 0, GetMaxHealth());
+			
+			SetCurrentHealth(NewHealth);
+
+			if (!FMath::IsNearlyEqual(OldHealth, NewHealth))
+			{
+				OnHealthChanged.Broadcast(BaseHealAmount, OldHealth, NewHealth);
 			}
 		}
 	}

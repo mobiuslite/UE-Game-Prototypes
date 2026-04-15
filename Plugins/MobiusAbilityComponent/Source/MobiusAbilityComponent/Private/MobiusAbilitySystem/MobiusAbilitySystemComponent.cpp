@@ -1,4 +1,7 @@
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
+
+#include "AbilitySystemGlobals.h"
+#include "GameplayCueManager.h"
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 #include "GameFramework/PlayerState.h"
 #include "MobiusAbilitySystem/MAGameplayAbility.h"
@@ -74,6 +77,22 @@ void UMobiusAbilitySystemComponent::ClearAbilityInput()
 	InputsHeld.Empty();
 }
 
+void UMobiusAbilitySystemComponent::ExecuteGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters & GameplayCueParameters)
+{
+	UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), GameplayCueTag, EGameplayCueEvent::Type::Executed, GameplayCueParameters);
+}
+
+void UMobiusAbilitySystemComponent::AddGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters & GameplayCueParameters)
+{
+	UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), GameplayCueTag, EGameplayCueEvent::Type::OnActive, GameplayCueParameters);
+	UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), GameplayCueTag, EGameplayCueEvent::Type::WhileActive, GameplayCueParameters);
+}
+
+void UMobiusAbilitySystemComponent::RemoveGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters & GameplayCueParameters)
+{
+	UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), GameplayCueTag, EGameplayCueEvent::Type::Removed, GameplayCueParameters);
+}
+
 void UMobiusAbilitySystemComponent::ResetAttributes()
 {
 	for (int32 i=0; i < DefaultStartingData.Num(); ++i)
@@ -84,6 +103,9 @@ void UMobiusAbilitySystemComponent::ResetAttributes()
 			Attributes->InitFromMetaDataTable(DefaultStartingData[i].DefaultStartingTable);
 		}
 	}
+	
+	const float CurrentHealth = GetNumericAttribute(UMACommonAttributeSet::GetCurrentHealthAttribute());
+	OnHealthChanged.Broadcast(CurrentHealth, CurrentHealth, CurrentHealth);
 }
 
 void UMobiusAbilitySystemComponent::OnAttributeSetHealthChanged(float EffectMagnitude, float OldValue, float NewValue)

@@ -206,12 +206,9 @@ void AMACharacter::NetMulticast_InvokeGameplayCueExecuted_Implementation(const F
 void AMACharacter::NetMulticast_InvokeGameplayCueExecuted_FromSpec_Implementation(
 	const FGameplayEffectSpecForRPC Spec, FPredictionKey PredictionKey)
 {
-	if (HasAuthority() || PredictionKey.IsLocalClientKey() == false)
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
-		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-		{
-			ASC->InvokeGameplayCueEvent(Spec, EGameplayCueEvent::Executed);
-		}
+		ASC->InvokeGameplayCueEvent(Spec, EGameplayCueEvent::Executed);
 	}
 }
 #pragma endregion 

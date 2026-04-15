@@ -42,12 +42,15 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 	FGameplayAttributeData DamageAmount;
 	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, DamageAmount);
+	UPROPERTY(BlueprintReadOnly)
+	FGameplayAttributeData HealAmount;
+	ATTRIBUTE_ACCESSORS(UMACommonAttributeSet, HealAmount);
 	
 	UPROPERTY(BlueprintAssignable)
 	mutable FMAAttributeEvent OnHealthChanged;
 	
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
-	
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 protected:
 	UFUNCTION()
 	virtual void OnRep_CurrentHealth(const FGameplayAttributeData& OldCurrentHealth);
@@ -58,6 +61,4 @@ protected:
 	virtual void OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed);
 	UFUNCTION()
 	virtual void OnRep_AttackSpeed(const FGameplayAttributeData& OldAttackSpeed);
-	
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

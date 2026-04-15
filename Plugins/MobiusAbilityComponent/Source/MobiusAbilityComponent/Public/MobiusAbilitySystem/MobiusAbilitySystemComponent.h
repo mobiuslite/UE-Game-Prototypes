@@ -24,14 +24,22 @@ public:
 	virtual void ProcessAbilityInput(const float DeltaTime, const bool bGamePaused);
 	virtual void ClearAbilityInput();
 	
+	UFUNCTION(BlueprintCallable, Category = "GameplayCue", Meta = (AutoCreateRefTerm = "GameplayCueParameters", GameplayTagFilter = "GameplayCue"))
+	void ExecuteGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters& GameplayCueParameters);
+	UFUNCTION(BlueprintCallable, Category = "GameplayCue", Meta = (AutoCreateRefTerm = "GameplayCueParameters", GameplayTagFilter = "GameplayCue"))
+	void AddGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters& GameplayCueParameters);
+	UFUNCTION(BlueprintCallable, Category = "GameplayCue", Meta = (AutoCreateRefTerm = "GameplayCueParameters", GameplayTagFilter = "GameplayCue"))
+	void RemoveGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters& GameplayCueParameters);
+	
 	UFUNCTION(BlueprintCallable)
 	void ResetAttributes();
 	
 	UPROPERTY(BlueprintAssignable)
 	mutable FMAAttributeEvent OnHealthChanged;
 	
-protected:
 	virtual void BeginPlay() override;
+	
+protected:
 	
 	UPROPERTY()
 	TArray<int32> InputsHeld;

@@ -18,7 +18,10 @@ class MOBIUSABILITYCOMPONENT_API UMAUtils : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:
-	UFUNCTION(BlueprintCallable, Category="BPUtils|Ability")
+	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability")
 	static FGameplayEffectSpecHandle MakeHitDamageSpec(UAbilitySystemComponent* AbilityComponent,
-		UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass);
+		UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FHitResult& HitResult, AActor* Causer);
+	
+	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability")
+	static FGameplayEffectSpecHandle MakeSpecSetByCaller(const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FGameplayTag& Tag, const float Value);
 };
