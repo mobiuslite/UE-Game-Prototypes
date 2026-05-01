@@ -60,6 +60,8 @@ public:
 	template<class T>
 	static T GetRandomItem(const TArray<T>& Array)
 	{
+		if (Array.Num() == 0) return T();
+		
 		return Array[FMath::RandRange(0, Array.Num() - 1)];
 	}
 	
@@ -145,4 +147,9 @@ public:
 	static void GetTeamAttitudeExec(const FGenericTeamId& ThisTeamId, const FGenericTeamId& OtherTeamId, TEnumAsByte<ETeamAttitude::Type>& OutAttitude);
 	UFUNCTION(BlueprintCallable)
 	static ETeamAttitude::Type GetTeamAttitude(const FGenericTeamId& ThisTeamId, const FGenericTeamId& OtherTeamId);
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool IsDead(const AActor* Actor);
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool IsAlive(const AActor* Actor);
 };

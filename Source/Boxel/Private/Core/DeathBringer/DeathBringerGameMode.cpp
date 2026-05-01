@@ -89,6 +89,8 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 				}
 			}
 			
+			PlayerController->ChangeState(NAME_Playing);
+			PlayerController->ClientGotoState(NAME_Playing);
 			RestartPlayer(PlayerController);
 			
 			if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerController->PlayerState)))
@@ -174,17 +176,24 @@ void ADeathBringerGameMode::StartGame()
 		ABoxelPlayerState* PlayerState = Player->GetPlayerState<ABoxelPlayerState>();
 		if (!PlayerState) continue;
 		
+		PlayerState->UnregisterUncommonVoiceChannels();
+		
 		int32 TeamId = DeathBringers.Contains(Player) ? EDeathBringerTeam::DeathBringer : EDeathBringerTeam::Normal;
 		if (i == RandomSaviourIndex) TeamId = EDeathBringerTeam::Saviour;
 		
 		PlayerState->SetGenericTeamId(FGenericTeamId(TeamId));
+		
+		if (HasTeamVoiceChannel(TeamId))
+		{
+			PlayerState->RegisterVoiceChannel(TeamId);
+		}
 		
 		if (UAbilitySystemComponent* AbilityComp = PlayerState->GetAbilitySystemComponent())
 		{
 			AbilityComp->RemoveLooseGameplayTag(TAG_Gameplay_Invincible);
 		}
 		
-		//None normal player get sum money to spend, yippee!!
+		//Not normal player get sum money to spend, yippee!!
 		if (TeamId != EDeathBringerTeam::Normal)
 		{
 			UInventoryComponent* Inventory;
@@ -230,15 +239,10 @@ void ADeathBringerGameMode::KillPlayer(APawn* Player)
 		DeathBringers.Remove(Player);
 	}
 	
-	AController* PawnController = Player->GetController();
-		
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	if (ASpectatorPawn* Spectator = GetWorld()->SpawnActor<ASpectatorPawn>(SpectatorClass, Player->GetActorLocation(), Player->GetActorRotation(), Params))
-	{
-		PawnController->Possess(Spectator);
-	}
+	APlayerController* PawnController = Player->GetController<APlayerController>();
+	
+	PawnController->ChangeState(NAME_Spectating);
+	PawnController->ClientGotoState(NAME_Spectating);
 	
 	if (AlivePlayers.Num() == DeathBringers.Num())
 	{
@@ -269,6 +273,11 @@ bool ADeathBringerGameMode::CanBeDeathBringer(const APlayerController* Controlle
 {
 	//TODO: Maybe add a case where someone can't be a death bringer
 	return true;
+}
+
+bool ADeathBringerGameMode::HasTeamVoiceChannel(const int32 TeamID)
+{
+	return TeamID == EDeathBringerTeam::DeathBringer;
 }
 
 void ADeathBringerGameMode::OnPlayerLogin(AGameModeBase* GameMode, APlayerController* PC)

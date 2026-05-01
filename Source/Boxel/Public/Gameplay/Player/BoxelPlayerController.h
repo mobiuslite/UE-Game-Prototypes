@@ -31,6 +31,14 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	
+	virtual void BeginSpectatingState() override;
+	virtual void EndSpectatingState() override;
+	
+	virtual ASpectatorPawn* SpawnSpectatorPawn() override;
+	
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TSoftObjectPtr<UInputMappingContext> InputMapping;
+private:
+	
+	FVector UnpossessPawnLocation;
 };

@@ -7,6 +7,8 @@
 #include "DeathBringerItemDataAsset.generated.h"
 
 
+class AInventoryItem;
+
 namespace EDeathBringerTeam
 {
 	enum Type : uint8;
@@ -26,8 +28,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UTexture2D> ItemIcon;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (MustImplement = "/Script/Boxel.InventoryItem"))
-	TSubclassOf<AActor> ItemClass;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<AInventoryItem> ItemClass;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TEnumAsByte<EDeathBringerTeam::Type> RequiredTeam;
 	

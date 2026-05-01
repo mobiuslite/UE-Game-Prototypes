@@ -15,20 +15,22 @@ ATeamTester::ATeamTester()
 	bAlwaysRelevant = true;
 }
 
-void ATeamTester::AddPawnToEvaluator(const APawn* Pawn)
+bool ATeamTester::AddPawnToEvaluator(const APawn* Pawn)
 {
-	if (!HasAuthority()) return;
-	if (PlayersToEvaluate.Num() == NumEvaluators) return;
-	if (!Pawn) return;
-	if (!IsPowered()) return;
+	if (!HasAuthority()) return false;
+	if (PlayersToEvaluate.Num() == NumEvaluators) return false;
+	if (!Pawn) return false;
+	if (!IsPowered()) return false;
 	
 	if (ABoxelPlayerState* PlayerState = Pawn->GetPlayerState<ABoxelPlayerState>())
 	{
-		if (PlayersToEvaluate.Contains(PlayerState)) return;
+		if (PlayersToEvaluate.Contains(PlayerState)) return false;
 		
 		PlayersToEvaluate.Add(PlayerState);
 		OnEvaluatorAdded.Broadcast(Pawn);
 	}
+	
+	return true;
 }
 
 bool ATeamTester::StartEvaluation()

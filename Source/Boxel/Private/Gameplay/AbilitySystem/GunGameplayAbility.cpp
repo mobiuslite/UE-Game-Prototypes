@@ -31,7 +31,6 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	
 	FireGun(Gun);
-	Gun->ConsumeAmmo();
 	
 	Gun->ApplySpread();
 	Gun->ConsumeAmmo();
@@ -98,5 +97,5 @@ AGunBase* UGunGameplayAbility::GetGunActor() const
 	const ABoxelPlayerCharacter* BoxelPlayer = OwningActor->GetPawn<ABoxelPlayerCharacter>();
 	if (!BoxelPlayer) return nullptr;
 	
-	return Cast<AGunBase>(BoxelPlayer->GetHeldItem().GetObject());
+	return Cast<AGunBase>(BoxelPlayer->GetHeldItem());
 }

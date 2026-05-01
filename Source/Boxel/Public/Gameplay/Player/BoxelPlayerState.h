@@ -8,7 +8,7 @@
 
 class AGunBase;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpeakingChangedSignature, const bool, bSpeaking);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSpeakingChangedSignature, const bool, bSpeaking, const bool, bUseTeamChannel);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGunEquippedSignature, const AGunBase*, Gun);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGunUnequippedSignature, const AGunBase*, Gun);
@@ -22,8 +22,19 @@ public:
 	
 	ABoxelPlayerState();
 	
+	static constexpr uint8 DEAD_CHANNELID = 255;
+	
 	UFUNCTION(BlueprintCallable)
-	void SetSpeaking(const bool bSpeaking);
+	void SetSpeaking(const bool bSpeaking, const bool bUseTeamChannel);
+	UFUNCTION(BlueprintCallable)
+	void RegisterVoiceChannel(const uint8 ChannelID);
+	UFUNCTION(BlueprintCallable)
+	void UnregisterVoiceChannel(const uint8 ChannelID);
+	UFUNCTION(BlueprintCallable)
+	//Unregisters from all voice channels except 0 & 1 (Proximity and global radio)
+	void UnregisterUncommonVoiceChannels();
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	bool IsRegisteredToVoiceChannel(const uint8 ChannelID);
 	
 	UFUNCTION(BlueprintCallable)
 	void AUTH_SetTeamId(const FGenericTeamId& NewTeamID);
@@ -59,12 +70,22 @@ protected:
 	FOnGunEquippedSignature OnGunUnequippedDelegate;
 	
 	UFUNCTION(BlueprintNativeEvent)
-	void OnSetSpeaking(const bool bSpeaking);
+	void OnSetSpeaking(const bool bSpeaking, const bool bUseTeamChannel);
+	
+	UFUNCTION(Server, Reliable)
+	void Server_SetIsTeamSpeaking(const bool bTeamSpeaking);
+	UFUNCTION(Client, Reliable)
+	void Client_SetTeammateIsSpeaking(const bool bTeamSpeaking, const APlayerState* PlayerState);
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_SetTeammateSpeaking(const bool bSpeaking, const int64 OtherUserId, const APlayerState* PlayerState);
 	
 	UFUNCTION()
 	void AUTH_OnRoundReset();
 	
 private:
+	
+	UPROPERTY()
+	TArray<uint8> RegisteredVoiceChannels; 
 	
 	UFUNCTION()
 	void OnRep_TeamID(const FGenericTeamId OldTeamID);

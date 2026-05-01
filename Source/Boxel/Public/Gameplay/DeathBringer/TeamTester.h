@@ -21,7 +21,7 @@ public:
 	ATeamTester();
 
 	UFUNCTION(BlueprintCallable)
-	void AddPawnToEvaluator(const APawn* Pawn);
+	bool AddPawnToEvaluator(const APawn* Pawn);
 	
 	//returns true if successfully started, not related to test result
 	UFUNCTION(BlueprintCallable)

@@ -115,7 +115,7 @@ void UInventoryComponent::ClearInventory()
 	}
 }
 
-void UInventoryComponent::RemoveItem(TScriptInterface<IInventoryItem> Item)
+void UInventoryComponent::RemoveItem(AInventoryItem* Item)
 {
 	AController* OwnerController = GetOwnerController();
 	if (!OwnerController)
@@ -123,13 +123,13 @@ void UInventoryComponent::RemoveItem(TScriptInterface<IInventoryItem> Item)
 		UE_LOG(LogTemp, Warning, TEXT("Inventory Component controller is null!"))
 	}
 	
-	if (!IsValid(Item.GetObject())) return;
+	if (!IsValid(Item)) return;
 	
 	Items.Remove(Item);
-	Item.GetInterface()->OnRemovedFromInventory(this, OwnerController);
+	Item->OnRemovedFromInventory(this, OwnerController);
 }
 
-bool UInventoryComponent::AddItem(TScriptInterface<IInventoryItem> Item)
+bool UInventoryComponent::AddItem(AInventoryItem* Item)
 {
 	AController* OwnerController = GetOwnerController();
 	if (!OwnerController)
@@ -141,13 +141,15 @@ bool UInventoryComponent::AddItem(TScriptInterface<IInventoryItem> Item)
 	if (Items.Contains(Item)) return false;
 	
 	const EInventoryItem::Type ItemType = Item->GetItemType();
+	ensure(ItemType != EInventoryItem::None); // Please set the item type for this actor
+	
 	const int NumAllowedType = GetMaxItemAmount(ItemType);
 	if (Item->GetItemType() != EInventoryItem::None && NumAllowedType > 0)
 	{
 		int NumItemTypesInInv = 0;
 		for (int i = 0; i < Items.Num(); ++i)
 		{
-			const TScriptInterface<IInventoryItem>& InventoryItem = Items[i];
+			const AInventoryItem* InventoryItem = Items[i];
 			if (InventoryItem->GetItemType() == Item->GetItemType())
 			{
 				NumItemTypesInInv++;
@@ -158,7 +160,7 @@ bool UInventoryComponent::AddItem(TScriptInterface<IInventoryItem> Item)
 	}
 	
 	Items.Add(Item);
-	Item.GetInterface()->OnAddedToInventory(this, OwnerController);
+	Item->OnAddedToInventory(this, OwnerController);
 	
 	return true;
 }
@@ -197,16 +199,16 @@ int UInventoryComponent::GetResourceCount(const FGameplayTag& ResourceTag) const
 	return Resources.GetResourceCount(ResourceTag);
 }
 
-TScriptInterface<IInventoryItem> UInventoryComponent::GetItemByIndex(const int Index) const
+AInventoryItem* UInventoryComponent::GetItemByIndex(const int Index) const
 {
-	if (Index >= Items.Num() || Index < 0) return TScriptInterface<IInventoryItem>(nullptr);
+	if (Index >= Items.Num() || Index < 0) return nullptr;
 	
 	return Items[Index];
 }
 
-int UInventoryComponent::GetIndexOfItem(const TScriptInterface<IInventoryItem> Item) const
+int UInventoryComponent::GetIndexOfItem(const AInventoryItem* Item) const
 {
-	if (!IsValid(Item.GetObject())) return INDEX_NONE;
+	if (!IsValid(Item)) return INDEX_NONE;
 	
 	return Items.IndexOfByKey(Item);
 }

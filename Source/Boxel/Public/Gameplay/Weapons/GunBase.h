@@ -14,44 +14,30 @@ class UGameplayEffect;
 class UGameplayAbility;
 class UGunGameplayAbility;
 
-USTRUCT()
-struct FHolderHistoryData
-{
-	GENERATED_BODY()
-	
-	UPROPERTY()
-	const APawn* PreviousHolder;
-	UPROPERTY()
-	float HeldCooldownTimer;
-};
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChangedSignature, int, CurrentAmmo, int, MaxAmmo);
 
 UCLASS()
-class BOXEL_API AGunBase : public AActor, public IInventoryItem
+class BOXEL_API AGunBase : public AInventoryItem
 {
 	GENERATED_BODY()
 
 public:
 	AGunBase();
-	virtual void Tick(float DeltaTime) override;
+	virtual void Tick(float DeltaSeconds) override;
 	
-	virtual void OnEquip(AController* HolderController) override;
-	virtual void OnUnequip(AController* HolderController) override;
+	virtual void OnEquip_Implementation(AController* HolderController) override;
+	virtual void OnUnequip_Implementation(AController* HolderController) override;
 	
-	virtual void OnAddedToInventory(const UInventoryComponent* Inventory, AController* HolderController) override;
-	virtual void OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController) override;
+	virtual void OnAddedToInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController) override;
+	virtual void OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController) override;
 	
-	UFUNCTION(BlueprintCallable, BlueprintPure)
-	APawn* GetHolder () const { return Holder; }
+	
 	int GetAmmoCount () const { return CurrentClipAmmo; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool CanUseGun() const;
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool IsLocallyHeldGun() const;
-	
-	virtual bool CanBePickedUp(const APawn* PawnHolder) const override;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	float GetFireRate() const;
@@ -79,9 +65,6 @@ public:
 	
 	void ConsumeAmmo();
 	
-	void StartAiming();
-	void EndAiming();
-	
 	//Returns if reload was successful
 	UFUNCTION(BlueprintNativeEvent)
 	bool StartReload();
@@ -91,6 +74,10 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 protected:
+	
+	virtual void OnRep_Holder() override;
+	virtual void OnHolderHistoryRemoved() override;
+	virtual void OnHolderHistoryAdded() override;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	UStaticMeshComponent* GunMesh;
@@ -154,13 +141,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Gun|UI")
 	TSubclassOf<UToastWidget> AimToastClass;
 	
-	int AimToastId = -1;
-	
-	UPROPERTY(EditDefaultsOnly, Category="Gun|Inventory")
-	TEnumAsByte<EInventoryItem::Type> ItemType = EInventoryItem::LargeItem;
-	
-	virtual TEnumAsByte<EInventoryItem::Type> GetItemType() const override { return ItemType; }
-	
 	float ReloadTimer;
 	UFUNCTION(BlueprintNativeEvent)
 	void FinishedReloading();
@@ -173,23 +153,7 @@ protected:
 	UPROPERTY(BlueprintAssignable)
 	FOnAmmoChangedSignature OnAmmoChangedDelegate;
 	
+	virtual void SetPhysicsEnabled(const bool bEnabled) override;
+	
 	virtual void BeginPlay() override;
-	
-	UFUNCTION()
-	void OnRep_Holder();
-private:
-	
-	UPROPERTY(ReplicatedUsing=OnRep_Visible)
-	bool bVisible = true;
-	UFUNCTION()
-	void OnRep_Visible();
-	
-	UPROPERTY(ReplicatedUsing=OnRep_Holder)
-	APawn* Holder;
-	
-	void SetPhysicsEnabled(const bool bEnabled);
-	
-	//Stop players who just threw the gun from picking it up immediately 
-	UPROPERTY()
-	TArray<FHolderHistoryData> HolderHistory;
 };

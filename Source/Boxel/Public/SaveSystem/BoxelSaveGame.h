@@ -17,8 +17,11 @@ public:
 	
 	UBoxelSaveGame();
 	
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	float MouseSensitivity;
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	float FOV;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	bool bCameraMotion;
 };

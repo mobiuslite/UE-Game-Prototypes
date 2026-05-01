@@ -1,11 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayAbilitySpecHandle.h"
 #include "Gameplay/Interfaces/Interactable.h"
 #include "MobiusAbilitySystem/Player/MACharacter.h"
 #include "BoxelPlayerCharacter.generated.h"
 
-class IInventoryItem;
+class AInventoryItem;
+class UGameplayAbility;
 class UInventoryComponent;
 class UToastWidget;
 class USphereComponent;
@@ -44,12 +46,13 @@ public:
 	
 	virtual void Landed(const FHitResult& Hit) override;
 	
-	//TODO: Add a bit more of a generic inventory system. Allow 1 side arm, and 1 main firearm
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	TScriptInterface<IInventoryItem> GetHeldItem() const { return HeldItem; }
+	AInventoryItem* GetHeldItem() const { return HeldItem; }
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	bool IsAiming() const { return AimToastId != INDEX_NONE; }
 	
 	UFUNCTION()
-	bool PickUpItem(const TScriptInterface<IInventoryItem>& Item, const bool bConceal = false);
+	bool PickUpItem(AInventoryItem* Item, const bool bConceal = false);
 	UFUNCTION(Server, Reliable)
 	void DropHeldGun(const bool bThrow = true);
 	UFUNCTION()
@@ -62,7 +65,7 @@ public:
 	//Visuals only
 	virtual void Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead) override;
 	UFUNCTION(BlueprintImplementableEvent)
-	void BP_LocalOnTakeDamage(const AController* DamageInstigator, const AActor* DamageCauser);
+	void BP_LocalOnTakeDamage(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead);
 	
 	//Player death logic
 	virtual void Server_OnPlayerDead(const FHitResult& Hit, const AActor* Causer) override;
@@ -103,9 +106,9 @@ protected:
 	void OnRep_IsRagdoll();
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HeldItem)
-	TScriptInterface<IInventoryItem> HeldItem;
+	AInventoryItem* HeldItem;
 	UFUNCTION()
-	void OnRep_HeldItem(const TScriptInterface<IInventoryItem>& LastGun);
+	void OnRep_HeldItem(const AInventoryItem* LastGun);
 	UFUNCTION(Server, Reliable)
 	void Server_SetHeldItemIndex(const int Index);
 	void SetHeldItemIndex(int Index);
@@ -172,21 +175,30 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* PushToTalkAction;
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
+	UInputAction* TeamTalkAction;
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* PauseAction;
 	//Input
 	
-	float TimeSpentInAir;
-	//A new on landed method with extra info, like time spend in air
+	//A new on landed method with extra info
 	UFUNCTION(BlueprintNativeEvent)
-	void OnLandedEX(const float TimeInAir, const FHitResult& Hit);
+	void OnLandedEX(const float ZVelocity, const FHitResult& Hit);
 	
-	UFUNCTION(BlueprintNativeEvent)
-	void OnRep_Talking();
-	UPROPERTY(ReplicatedUsing=OnRep_Talking, BlueprintReadOnly)
-	bool bTalking;
+	UPROPERTY(BlueprintReadOnly)
+	bool bRadioTalking;
+	UPROPERTY(BlueprintReadOnly)
+	bool bTeamTalking;
+	
+	int AimToastId = -1;
 	
 	UPROPERTY()
 	TSubclassOf<UAnimInstance> OriginalAnimInstanceClass;
+	
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UGameplayAbility> UnarmedAbilityClass;
+	UPROPERTY()
+	FGameplayAbilitySpecHandle UnarmedAbilityHandle;
+	
 private:
 	
 	void MoveInput(const FInputActionValue& Value);
@@ -210,9 +222,15 @@ private:
 	void TalkInput(const FInputActionValue& Value);
 	void TalkInput_Released(const FInputActionValue& Value);
 
+	void TeamTalkInput(const FInputActionValue& Value);
+	void TeamTalkInput_Released(const FInputActionValue& Value);
+	
 	void PauseInput(const FInputActionValue& Value);
 	
 	float CurrentZoomAmount;
+	void CleanupToasts();
+	
+	void SetSpeaking(const bool bSpeaking, const bool bTeamSpeaking);
 	
 public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

@@ -61,6 +61,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	static TEnumAsByte<EDeathBringerTeam::Type> TeamIDToTeamEnum(const struct FGenericTeamId& TeamId);
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool HasTeamVoiceChannel(const int32 TeamID);
 	
 protected:
 	

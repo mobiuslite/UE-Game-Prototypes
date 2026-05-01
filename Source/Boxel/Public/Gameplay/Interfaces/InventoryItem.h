@@ -22,26 +22,74 @@ namespace EInventoryItem
 	};
 }
 
-UINTERFACE()
-class UInventoryItem : public UInterface
+USTRUCT()
+struct FHolderHistoryData
 {
 	GENERATED_BODY()
+	
+	UPROPERTY()
+	const APawn* PreviousHolder;
+	UPROPERTY()
+	float HeldCooldownTimer;
 };
 
-class BOXEL_API IInventoryItem
+UCLASS()
+class BOXEL_API AInventoryItem : public AActor
 {
 	GENERATED_BODY()
 
 public:
 	
+	AInventoryItem();
+	
 	//When item is put in hands
 	//These should only be called by local or authority, simulated proxies should not call these
-	virtual void OnEquip(AController* HolderController) {}
-	virtual void OnUnequip(AController* HolderController) {}
+	UFUNCTION(BlueprintNativeEvent)
+	void OnEquip(AController* HolderController);
+	UFUNCTION(BlueprintNativeEvent)
+	void OnUnequip(AController* HolderController);
 	
-	virtual void OnAddedToInventory(const UInventoryComponent* Inventory, AController* HolderController) {}
-	virtual void OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController) {}
+	//To override, use _Implementation override function
+	UFUNCTION(BlueprintNativeEvent)
+	void OnAddedToInventory(const UInventoryComponent* Inventory, AController* HolderController);
+	UFUNCTION(BlueprintNativeEvent)
+	void OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController);
 	
-	virtual bool CanBePickedUp(const APawn* PawnHolder) const {return true;}
-	virtual TEnumAsByte<EInventoryItem::Type> GetItemType() const { return EInventoryItem::None; }
+	virtual bool CanBePickedUp(const APawn* PawnHolder) const;
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	TEnumAsByte<EInventoryItem::Type> GetItemType() const { return ItemType; }
+	
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+	
+protected:
+	
+	virtual void Tick(float DeltaSeconds) override;
+	
+	UPROPERTY(EditDefaultsOnly)
+	TEnumAsByte<EInventoryItem::Type> ItemType;
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	APawn* GetHolder() const { return HolderPrivate; }
+	UFUNCTION()
+	virtual void OnRep_Holder();
+	
+	virtual void SetPhysicsEnabled(const bool bEnabled);
+	
+	//Holder history are call backs that happen when a player drops a weapon, and is cleared after 0.5 seconds
+	//This is useful for stopping collision between the previous holder and the item, so they don't immediately attempt to pick up the item again
+	virtual void OnHolderHistoryAdded() {};
+	virtual void OnHolderHistoryRemoved() {};
+	
+private:
+	UPROPERTY(ReplicatedUsing=OnRep_Visible)
+	bool bVisible = true;
+	UFUNCTION()
+	void OnRep_Visible();
+	
+	UPROPERTY(ReplicatedUsing=OnRep_Holder)
+	APawn* HolderPrivate;
+	
+	UPROPERTY()
+	TArray<FHolderHistoryData> HolderHistory;
 };

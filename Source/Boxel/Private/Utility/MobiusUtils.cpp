@@ -3,9 +3,12 @@
 
 #include "Utility/MobiusUtils.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "GameFramework/PlayerController.h"
 #include "Gameplay/Interfaces/InventoryInterface.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
+#include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 
 bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float const Distance, FVector& OutStartLocation, FVector& OutEndLocation)
 {
@@ -124,4 +127,20 @@ void UMobiusUtils::GetTeamAttitudeExec(const FGenericTeamId& ThisTeamId, const F
 ETeamAttitude::Type UMobiusUtils::GetTeamAttitude(const FGenericTeamId& ThisTeamId, const FGenericTeamId& OtherTeamId)
 {
 	return FGenericTeamId::GetAttitude(ThisTeamId, OtherTeamId);
+}
+
+bool UMobiusUtils::IsDead(const AActor* Actor)
+{
+	bool bResult = true;
+	if (const UAbilitySystemComponent* AbilityComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Actor))
+	{
+		bResult = AbilityComponent->GetNumericAttribute(UMACommonAttributeSet::GetCurrentHealthAttribute()) <= 0.0f;
+	}
+	
+	return bResult;
+}
+
+bool UMobiusUtils::IsAlive(const AActor* Actor)
+{
+	return !IsDead(Actor);
 }

@@ -11,7 +11,6 @@
 
 
 class UResourceDataAsset;
-class IInventoryItem;
 
 USTRUCT()
 struct FResourceData : public  FFastArraySerializerItem
@@ -78,9 +77,9 @@ public:
 	void ClearInventory();
 	
 	UFUNCTION(BlueprintCallable)
-	void RemoveItem(TScriptInterface<IInventoryItem> Item);
+	void RemoveItem(AInventoryItem* Item);
 	UFUNCTION(BlueprintCallable)
-	bool AddItem(TScriptInterface<IInventoryItem> Item);
+	bool AddItem(AInventoryItem* Item);
 	
 	UFUNCTION(BlueprintCallable)
 	bool AddResource(const FGameplayTag& ResourceTag, const int Count);
@@ -92,9 +91,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	int GetItemCount() const { return Items.Num(); }
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	TScriptInterface<IInventoryItem>  GetItemByIndex(const int Index) const;
+	AInventoryItem* GetItemByIndex(const int Index) const;
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	int GetIndexOfItem(const TScriptInterface<IInventoryItem> Item) const;
+	int GetIndexOfItem(const AInventoryItem* Item) const;
 	
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
@@ -111,7 +110,7 @@ protected:
 	int GetMaxItemAmount(const EInventoryItem::Type& Type);
 	
 	UPROPERTY(Replicated)
-	TArray<TScriptInterface<IInventoryItem>> Items;
+	TArray<AInventoryItem*> Items;
 	UPROPERTY(ReplicatedUsing=OnRep_Resources)
 	FResources Resources;
 	

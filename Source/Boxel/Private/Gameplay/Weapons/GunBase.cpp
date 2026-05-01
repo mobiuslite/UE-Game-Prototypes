@@ -5,23 +5,17 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "ToastSubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Utility/CollisionConsts.h"
-#include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
+#include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Utility/MobiusUtils.h"
-#include "Widgets/ToastWidget.h"
 
 
 AGunBase::AGunBase()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	bReplicates = true;
-	SetReplicatingMovement(true);
-	
 	GunMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Gun Mesh"));
 	SetRootComponent(GunMesh);
 	
@@ -30,23 +24,6 @@ AGunBase::AGunBase()
 	
 	MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("Muzzle Location"));
 	MuzzleLocation->SetupAttachment(GunMesh);
-}
-
-bool AGunBase::CanBePickedUp(const APawn* PawnHolder) const
-{
-	bool bResult = true;
-	
-	for (int i = 0; i < HolderHistory.Num(); ++i)
-	{
-		const FHolderHistoryData& History = HolderHistory[i];
-		if (History.PreviousHolder == PawnHolder)
-		{
-			bResult = false;
-			break;
-		}
-	}
-	
-	return bResult;
 }
 
 float AGunBase::GetFireRate() const
@@ -69,7 +46,15 @@ void AGunBase::ApplySpread()
 
 float AGunBase::GetTotalBulletSpread() const
 {
-	float Result = BulletSpreadAmount + (AimToastId == INDEX_NONE && bHasScope ? MinSpreadAmount : AimingMinSpreadAmount);
+	const APawn* Holder = GetHolder();
+	
+	bool bIsAiming = false;
+	if (const ABoxelPlayerCharacter* Player = Cast<ABoxelPlayerCharacter>(Holder))
+	{
+		bIsAiming = Player->IsAiming();
+	}
+	
+	float Result = BulletSpreadAmount + (bIsAiming && bHasScope ? AimingMinSpreadAmount : MinSpreadAmount);
 	if (Holder)
 	{
 		if (const UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(Holder->GetMovementComponent()))
@@ -87,32 +72,10 @@ void AGunBase::ConsumeAmmo()
 	OnAmmoChangedDelegate.Broadcast(CurrentClipAmmo, AmmoPerClip);
 }
 
-void AGunBase::StartAiming()
-{
-	if (IsValid(GetAimWidgetClass()))
-	{
-		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
-		{
-			ToastSubsystem->ShowManualToast(GetAimWidgetClass(), 
-				TEXT(""), FVector2D(0.0f), FAnchors(0.0f, 0.0f, 1.0f, 1.0f), FVector2D(0.5f), AimToastId);
-		}
-	}
-}
-
-void AGunBase::EndAiming()
-{
-	if (AimToastId != INDEX_NONE)
-	{
-		if (UToastSubsystem* ToastSubsystem = GetWorld()->GetSubsystem<UToastSubsystem>())
-		{
-			ToastSubsystem->HideToast(AimToastId);
-			AimToastId = INDEX_NONE;
-		}
-	}
-}
-
 bool AGunBase::StartReload_Implementation()
 {
+	const APawn* Holder = GetHolder();
+	
 	if (ReloadTimer > 0.0f) return false;
 	if (!Holder) return false;
 	if (CurrentClipAmmo == AmmoPerClip) return false;
@@ -143,8 +106,23 @@ void AGunBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, CurrentClipAmmo);
-	DOREPLIFETIME(ThisClass, Holder);
-	DOREPLIFETIME(ThisClass, bVisible);
+}
+
+void AGunBase::OnRep_Holder()
+{
+	Super::OnRep_Holder();
+	
+	CancelReloading();
+}
+
+void AGunBase::OnHolderHistoryRemoved()
+{
+	GunMesh->ClearMoveIgnoreActors();
+}
+
+void AGunBase::OnHolderHistoryAdded()
+{
+	GunMesh->IgnoreActorWhenMoving(GetHolder(), true);
 }
 
 void AGunBase::BeginPlay()
@@ -153,46 +131,10 @@ void AGunBase::BeginPlay()
 	ResetGun();
 }
 
-void AGunBase::OnRep_Holder()
-{
-	SetOwner(Holder);
-	
-	//Disable collision while holding
-	SetPhysicsEnabled(Holder == nullptr);
-	
-	CancelReloading();
-	
-	if (Holder)
-	{
-		const FAttachmentTransformRules Rules = FAttachmentTransformRules(EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, EAttachmentRule::KeepWorld, true);
-		if (const ACharacter* Character = Cast<ACharacter>(Holder))
-		{
-			AttachToComponent(Character->GetMesh(), Rules, FName("GunSocket"));
-		}
-		else
-		{
-			AttachToActor(Holder, Rules);	
-		}
-	}
-	else
-	{
-		const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
-		DetachFromActor(Rules);
-		
-		//Rotate gun so the side is facing the player that dropped it
-		GunMesh->AddWorldRotation(FRotator(0.0f, 45.0f, 0.0f));
-	}
-}
-
-void AGunBase::OnRep_Visible()
-{
-	SetActorHiddenInGame(!bVisible);
-}
-
 void AGunBase::FinishedReloading_Implementation()
 {
 	UInventoryComponent* Inventory;
-	if (UMobiusUtils::GetInventory(Holder->GetPlayerState<APlayerState>(), Inventory))
+	if (UMobiusUtils::GetInventory(GetHolder()->GetPlayerState<APlayerState>(), Inventory))
 	{
 		Inventory->ConsumeResource(AmmoResourceTag, 1);
 	}
@@ -208,6 +150,8 @@ void AGunBase::CancelReloading_Implementation()
 
 void AGunBase::Server_RequestReload_Implementation()
 {
+	const APawn* Holder = GetHolder();
+	
 	if (!Holder) return;
 	if (CurrentClipAmmo == AmmoPerClip) return;
 	
@@ -221,44 +165,23 @@ void AGunBase::Server_RequestReload_Implementation()
 
 void AGunBase::SetPhysicsEnabled(const bool bEnabled)
 {
-	SetActorEnableCollision(bEnabled);
+	Super::SetPhysicsEnabled(bEnabled);
 	GunMesh->SetSimulatePhysics(bEnabled);
-	SetReplicatingMovement(bEnabled);
 }
 
 // Called every frame
-void AGunBase::Tick(float DeltaTime)
+void AGunBase::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaTime);
-
-	for (int i = 0; i < HolderHistory.Num();)
-	{
-		const FHolderHistoryData& History = HolderHistory[i];
-		float Timer = History.HeldCooldownTimer;
-		Timer -= DeltaTime;
-		if (Timer <= 0.0f)
-		{
-			HolderHistory.RemoveAt(i);
-			GunMesh->ClearMoveIgnoreActors();
-		}
-		else
-		{
-			FHolderHistoryData DataOverride;
-			DataOverride.HeldCooldownTimer = Timer;
-			DataOverride.PreviousHolder = History.PreviousHolder;
-			HolderHistory[i] = DataOverride;
-			i++;
-		}
-	}
+	Super::Tick(DeltaSeconds);
 	
 	if (BulletSpreadAmount > 0.0f)
 	{
-		BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount - (DeltaTime * SpreadReductionPerSecond), 0.0f, MaxBulletSpread);
+		BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount - (DeltaSeconds * SpreadReductionPerSecond), 0.0f, MaxBulletSpread);
 	}
 	
 	if (ReloadTimer > 0.0f)
 	{
-		ReloadTimer -= DeltaTime;
+		ReloadTimer -= DeltaSeconds;
 		if (ReloadTimer <= 0.0f)
 		{
 			FinishedReloading();
@@ -266,67 +189,47 @@ void AGunBase::Tick(float DeltaTime)
 	}
 }
 
-void AGunBase::OnEquip(AController* HolderController)
+void AGunBase::OnEquip_Implementation(AController* HolderController)
 {
 	if (HasAuthority())
 	{
 		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
 		{
-			AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
+			AbilityHandle = AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
 		}
 	}
 	
-	bVisible = true;
-	OnRep_Visible();
+	Super::OnEquip_Implementation(HolderController);
 }
 
-void AGunBase::OnUnequip(AController* HolderController)
+void AGunBase::OnUnequip_Implementation(AController* HolderController)
 {
 	if (HasAuthority())
 	{
 		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
 		{
-			AbilityComp->ClearAllAbilitiesWithInputID(1);
+			AbilityComp->ClearAbility(AbilityHandle);
+			AbilityHandle = FGameplayAbilitySpecHandle();
 		}
 	}
 	
-	bVisible = false;
-	OnRep_Visible();
+	Super::OnUnequip_Implementation(HolderController);
 	
-	EndAiming();
 	CancelReloading();
 }
 
-void AGunBase::OnAddedToInventory(const UInventoryComponent* Inventory, AController* HolderController)
+void AGunBase::OnAddedToInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController)
 {
-	this->Holder = HolderController->GetPawn();
-	OnRep_Holder();
-	
-	bVisible = false;
-	OnRep_Visible();
+	Super::OnAddedToInventory_Implementation(Inventory, HolderController);
 }
 
-void AGunBase::OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController)
+void AGunBase::OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController)
 {
 	UE_LOG(LogTemp, Display, TEXT("Removing holder from gun"));
 	
 	APawn* HolderPawn = HolderController->GetPawn();
-	if (HolderPawn)
-	{
-		FHolderHistoryData History;
-		History.PreviousHolder = HolderPawn;
-		History.HeldCooldownTimer = 0.5f;
-		
-		HolderHistory.Add(History);
-		
-		GunMesh->IgnoreActorWhenMoving(HolderPawn, true);
-	}
 	
-	this->Holder = nullptr;
-	OnRep_Holder();
-	
-	bVisible = true;
-	OnRep_Visible();
+	Super::OnRemovedFromInventory_Implementation(Inventory, HolderController);
 	
 	//TODO: Don't throw on killed death
 	if (HolderPawn)
@@ -344,9 +247,9 @@ bool AGunBase::IsLocallyHeldGun() const
 {
 	bool bResult = false;
 	
-	if (Holder)
+	if (GetHolder())
 	{
-		if (const AController* HolderController = Holder->GetController())
+		if (const AController* HolderController = GetHolder()->GetController())
 		{
 			bResult = HolderController->IsLocalController();
 		}
