@@ -12,9 +12,11 @@
 #include "Core/GameHUD.h"
 #include "Core/MobiusGameMode.h"
 #include "Core/DeathBringer/DeathBringerGameMode.h"
+#include "Core/Lobby/LobbyGameState.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Gameplay/Weapons/GunBase.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 #include "Net/UnrealNetwork.h"
 #include "SaveSystem/BoxelSaveSubsystem.h"
@@ -56,11 +58,11 @@ FRotator ABoxelPlayerCharacter::GetViewRotation() const
 		}
 	}
 
-	return Result + ExtraViewRotation;
+	return Result + ExtraViewRotation + FRotator(CurrentRecoilAmount, 0.0f, 0.0f);
 }
 
 void ABoxelPlayerCharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
-	const bool bIsDead)
+                                                                const bool bIsDead)
 {
 	if (bIsDead)
 	{
@@ -140,6 +142,11 @@ void ABoxelPlayerCharacter::OnRep_IsRagdoll()
 
 bool ABoxelPlayerCharacter::CanInteract_Implementation() const
 {
+	if (GetWorld()->GetGameState<ALobbyGameState>())
+	{
+		return false;
+	}
+	
 	return GetPlayerState() == nullptr;
 }
 
@@ -181,6 +188,20 @@ void ABoxelPlayerCharacter::Server_PlayerInteracted_Implementation(UObject* Inte
 	}
 }
 
+void ABoxelPlayerCharacter::AddFOVEffect(const float Strength, const float Duration, const bool bInstantSet)
+{
+	FCameraFOVEffect Effect;
+	Effect.Strength = Strength;
+	Effect.Timer = Duration;
+	
+	FOVEffects.Add(Effect);
+	
+	if (bInstantSet)
+	{
+		CurrentCameraFOV += Strength;
+	}
+}
+
 void ABoxelPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -202,6 +223,16 @@ void ABoxelPlayerCharacter::BeginPlay()
 			OriginalAnimInstanceClass = AnimInstance->GetClass();
 		}
 	}
+	
+	PlayerCamera = GetComponentByClass<UCameraComponent>();
+	if (PlayerCamera)
+	{
+		if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
+		{
+			PlayerCamera->SetFieldOfView(SaveSubsystem->GetFOV());
+			CurrentCameraFOV = SaveSubsystem->GetFOV();
+		}
+	}
 }
 
 void ABoxelPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -210,12 +241,59 @@ void ABoxelPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	CleanupToasts();
 }
 
-void ABoxelPlayerCharacter::Tick(float DeltaTime)
+void ABoxelPlayerCharacter::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaTime);
+	Super::Tick(DeltaSeconds);
 	
 	DoPlayerPreviewTrace();
 	DoInteractTrace();
+	
+	if (PlayerCamera && IsLocallyControlled())
+	{
+		float BaseFOV = 90.0f;
+		if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
+		{
+			BaseFOV = SaveSubsystem->GetFOV();
+		}
+		
+		float FOVToAdd = 0.0f;
+		for (int i = 0; i < FOVEffects.Num();)
+		{
+			FCameraFOVEffect& Effect = FOVEffects[i];
+			Effect.Timer -= DeltaSeconds;
+			if (Effect.Timer <= 0.0f)
+			{
+				FOVEffects.RemoveAt(i);
+			}
+			else
+			{
+				i++;
+				FOVToAdd += Effect.Strength;
+			}
+		}
+		
+		CurrentCameraFOV = UMobiusUtils::StableLerpFloat(CurrentCameraFOV, BaseFOV + FOVToAdd, FOVChangeSpeed, DeltaSeconds);
+		PlayerCamera->SetFieldOfView(CurrentCameraFOV / CurrentZoomAmount);
+		
+		if (!FMath::IsNearlyZero(RecoilTarget))
+		{
+			RecoilRecoverTimer -= DeltaSeconds;
+			if (RecoilRecoverTimer <= 0.0f)
+			{
+				RecoilTarget = 0.0f;
+			}
+			else
+			{
+				RecoilTarget = FMath::Clamp(UKismetMathLibrary::Ease(RecoilTarget, 0.0f, 1.0f - (RecoilRecoverTimer / RecoilRecoverDuration), EEasingFunc::ExpoIn), 0.0f, FLT_MAX);
+				if (RecoilTarget < 0.0f)
+				{
+					RecoilTarget = 0.0f;
+				}
+			}
+		
+			CurrentRecoilAmount = UMobiusUtils::StableLerpFloat(CurrentRecoilAmount, RecoilTarget, RecoilLerpSpeed, DeltaSeconds);
+		}
+	}
 }
 
 //Servers on player state ready
@@ -223,14 +301,23 @@ void ABoxelPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	
-	if (NewController && NewController->IsLocalController())
+	if (NewController)
 	{	
-		if (const APlayerController* PlayerController = Cast<APlayerController>(NewController))
+		if (NewController->IsLocalController())
 		{
-			if (AGameHUD* HUD = PlayerController->GetHUD<AGameHUD>())
+			if (const APlayerController* PlayerController = Cast<APlayerController>(NewController))
 			{
-				HUD->OnPlayerStateAdded(PlayerController->GetPlayerState<APlayerState>());
+				if (AGameHUD* HUD = PlayerController->GetHUD<AGameHUD>())
+				{
+					HUD->OnPlayerStateAdded(PlayerController->GetPlayerState<APlayerState>());
+				}
 			}
+			
+			OnLocalPlayerStateReady(GetPlayerState<ABoxelPlayerState>());
+		}
+		else
+		{
+			OnProxyPlayerStateReady(GetPlayerState<ABoxelPlayerState>());
 		}
 	}
 	
@@ -255,26 +342,30 @@ void ABoxelPlayerCharacter::OnRep_PlayerState()
 		{
 			GameHUD->OnPlayerStateAdded(GetPlayerState());
 		}
+		
+		OnLocalPlayerStateReady(GetPlayerState<ABoxelPlayerState>());
 	}
+	else
+	{
+		OnProxyPlayerStateReady(GetPlayerState<ABoxelPlayerState>());
+	}
+}
+
+void ABoxelPlayerCharacter::OnLocalPlayerStateReady_Implementation(ABoxelPlayerState* LocalPlayerState)
+{
+	if (LocalPlayerState) LocalPlayerState->OnLocalPlayerStateReady();
+}
+
+void ABoxelPlayerCharacter::OnProxyPlayerStateReady_Implementation(ABoxelPlayerState* ProxyPlayerState)
+{
+	if (ProxyPlayerState) ProxyPlayerState->OnProxyPlayerStateReady();
 }
 
 void ABoxelPlayerCharacter::OnAimPressed_Implementation()
 {
-	float BaseFOV = 90.0f;
-	if (UBoxelSaveSubsystem* SaveSubsystem = GetGameInstance()->GetSubsystem<UBoxelSaveSubsystem>())
-	{
-		BaseFOV = SaveSubsystem->GetFOV();
-	}
-	
 	if (AGunBase* Gun = Cast<AGunBase>(HeldItem))
 	{
-		if (Gun->GetGunZoomAmount(CurrentZoomAmount))
-		{
-			if (UCameraComponent* Camera = Cast<UCameraComponent>(GetComponentByClass(UCameraComponent::StaticClass())))
-			{
-				Camera->SetFieldOfView(BaseFOV / CurrentZoomAmount);
-			}
-		}
+		Gun->GetGunZoomAmount(CurrentZoomAmount);
 		
 		if (IsValid(Gun->GetAimWidgetClass()))
 		{
@@ -295,7 +386,7 @@ void ABoxelPlayerCharacter::OnAimReleased_Implementation()
 		BaseFOV = SaveSubsystem->GetFOV();
 	}
 	
-	CurrentZoomAmount = 0.0f;
+	CurrentZoomAmount = 1.0f;
 	
 	if (UCameraComponent* Camera = Cast<UCameraComponent>(GetComponentByClass(UCameraComponent::StaticClass())))
 	{
@@ -366,10 +457,21 @@ void ABoxelPlayerCharacter::DropAllItems()
 	OnRep_HeldItem(PreviousGun);
 }
 
+void ABoxelPlayerCharacter::AddRecoil(const float Amount, const float MaxRecoilAmount)
+{
+	ensure (MaxRecoilAmount > 0.0f);
+	
+	const float Multiplier = UKismetMathLibrary::Ease(1.0f, 0.0f, RecoilTarget / MaxRecoilAmount, EEasingFunc::EaseOut);
+	RecoilTarget += Amount * Multiplier;
+	
+	RecoilRecoverTimer = RecoilRecoverDuration;
+}
+
 void ABoxelPlayerCharacter::DropHeldGun_Implementation(const bool bThrow)
 {
 	if (!HeldItem) return;
 	if (!HasAuthority()) return;
+	if (!HeldItem->CanBeDropped()) return;
 	
 	AInventoryItem* PreviousItem = HeldItem;
 	HeldItem = nullptr;
@@ -398,16 +500,17 @@ void ABoxelPlayerCharacter::OnRep_HeldItem(const AInventoryItem* LastGun)
 			}
 		}
 		
-		const AGunBase* HeldGun = Cast<AGunBase>(HeldItem);
-		
-		if (const TSubclassOf<UAnimInstance> GunABP = HeldGun->GetGunAnimInstanceClass())
+		if (const TSubclassOf<UAnimInstance> GunABP = HeldItem->GetHeldABPClass())
 		{
 			GetMesh()->SetAnimInstanceClass(GunABP);
 		}
 		
-		if (const ABoxelPlayerState* BoxelState = GetPlayerState<ABoxelPlayerState>())
+		if (const AGunBase* HeldGun = Cast<AGunBase>(HeldItem))
 		{
-			BoxelState->BroadcastGunEquipped(HeldGun);
+			if (const ABoxelPlayerState* BoxelState = GetPlayerState<ABoxelPlayerState>())
+			{
+				BoxelState->BroadcastGunEquipped(HeldGun);
+			}
 		}
 	}
 	else
@@ -628,6 +731,19 @@ void ABoxelPlayerCharacter::Landed(const FHitResult& Hit)
 	Super::Landed(Hit);
 }
 
+void ABoxelPlayerCharacter::SetPlayerUnarmed()
+{
+	AInventoryItem* PreviousItem = HeldItem;
+	HeldItem = nullptr;
+	
+	if (PreviousItem)
+	{
+		PreviousItem->OnUnequip(GetController());
+	}
+	
+	OnRep_HeldItem(PreviousItem);
+}
+
 void ABoxelPlayerCharacter::OnLandedEX_Implementation(const float ZVelocity, const FHitResult& Hit)
 {
 }
@@ -695,21 +811,21 @@ void ABoxelPlayerCharacter::AimInput_Released(const FInputActionValue& Value)
 
 void ABoxelPlayerCharacter::DropInput(const FInputActionValue& Value)
 {
+	if (!HeldItem) return;
+	if (!HeldItem->CanBeDropped()) return;
+	
 	OnAimReleased();
 	DropHeldGun();
 
 	if (!HasAuthority())
 	{
 		//Client prediction
-		if (AGunBase* HeldGun = Cast<AGunBase>(HeldItem))
+		if (HeldItem)
 		{
-			if (HeldGun)
-			{
-				UInventoryComponent* Inventory;
-				if (!UMobiusUtils::GetInventory(GetPlayerState(), Inventory)) return;
+			UInventoryComponent* Inventory;
+			if (!UMobiusUtils::GetInventory(GetPlayerState(), Inventory)) return;
 	
-				Inventory->RemoveItem(HeldGun);
-			}
+			Inventory->RemoveItem(HeldItem);
 		}
 	}
 }

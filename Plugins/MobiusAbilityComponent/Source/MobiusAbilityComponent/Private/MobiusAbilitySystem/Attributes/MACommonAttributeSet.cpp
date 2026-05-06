@@ -31,6 +31,9 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		
 		const FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
 		
+		FGameplayTagContainer EffectAssetTags;
+		Data.EffectSpec.GetAllAssetTags(EffectAssetTags);
+		
 		FHitResult HitResult;
 		if (const FHitResult* HitPtr = Context.GetHitResult())
 		{
@@ -53,7 +56,7 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		
 		if (const UAbilitySystemComponent* TargetAbilityComponent = TargetActor->GetAbilitySystemComponent())
 		{
-			if (TargetAbilityComponent->HasMatchingGameplayTag(TAG_Gameplay_Invincible))
+			if (TargetAbilityComponent->HasMatchingGameplayTag(TAG_Gameplay_Invincible) && !EffectAssetTags.HasTagExact(TAG_Damage_Forced))
 			{
 				FinalDamage = 0.0f;
 			}
@@ -117,8 +120,24 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		}
 	}
 	
-	
 	Super::PostGameplayEffectExecute(Data);
+}
+
+void UMACommonAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+	
+	if (Attribute == GetMaxHealthAttribute())
+	{
+		const float OldMaxHealth = GetMaxHealth();
+		const float OldCurrentHealth = GetCurrentHealth();
+		const float Delta = NewValue - OldMaxHealth;
+
+		const float NewHealthValue = FMath::Clamp(GetCurrentHealth() + Delta, 0, NewValue);
+		SetCurrentHealth(NewHealthValue);
+		
+		OnHealthChanged.Broadcast(Delta, OldCurrentHealth, NewHealthValue);
+	}
 }
 
 void UMACommonAttributeSet::OnRep_CurrentHealth(const FGameplayAttributeData& OldCurrentHealth)
@@ -134,6 +153,10 @@ void UMACommonAttributeSet::OnRep_CurrentHealth(const FGameplayAttributeData& Ol
 void UMACommonAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(ThisClass, MaxHealth, OldMaxHealth);
+	
+	//Fixes a bug where OnHealthChanged won't get called if only max health changed and not current health
+	const float Health = GetCurrentHealth();
+	OnHealthChanged.Broadcast(0.0f, Health, Health);
 }
 
 void UMACommonAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed)

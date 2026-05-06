@@ -3,10 +3,10 @@
 
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 
-#include "AssetRegistry/AssetRegistryModule.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/DeathBringer/Inventory/ResourceDataAsset.h"
 #include "Gameplay/Interfaces/InventoryItem.h"
+#include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "Utility/AssetRegistryUtils.h"
@@ -107,7 +107,7 @@ void UInventoryComponent::ClearInventory()
 		RemoveItem(Items[0]);
 	}
 	
-	Resources.ClearResources();
+	Resources.Empty();
 	
 	if (ABoxelPlayerState* PlayerState = Cast<ABoxelPlayerState>(GetOwner()))
 	{
@@ -124,6 +124,15 @@ void UInventoryComponent::RemoveItem(AInventoryItem* Item)
 	}
 	
 	if (!IsValid(Item)) return;
+	
+	//If player is holding this item, set them to be unarmed
+	if (ABoxelPlayerCharacter* OwnerCharacter = GetOwnerController()->GetPawn<ABoxelPlayerCharacter>())
+	{
+		if (OwnerCharacter->GetHeldItem() == Item)
+		{
+			OwnerCharacter->SetPlayerUnarmed();
+		}
+	}
 	
 	Items.Remove(Item);
 	Item->OnRemovedFromInventory(this, OwnerController);
@@ -170,25 +179,64 @@ bool UInventoryComponent::AddResource(const FGameplayTag& ResourceTag, const int
 	const UResourceDataAsset* Data = UInventoryComponent::GetResourceCDOFromTag(ResourceTag);
 	ensure(Data); //Please add data asset for this resource 
 	
-	int CurrentResourceCount = Resources.GetResourceCount(ResourceTag);
-
-	if (Data->MaxResourceCount > 0 && CurrentResourceCount + Count > Data->MaxResourceCount) return false;
+	TArray<FResourceData> PreviousResources = Resources;
 	
-	Resources.AddResource(ResourceTag, Count);
-	CurrentResourceCount += Count;
+	if (Data->MaxResourceCount > 0 && GetResourceCount(ResourceTag) + Count > Data->MaxResourceCount) return false;
 	
-	OnResourceChangedDelegate.Broadcast(ResourceTag, Count, CurrentResourceCount);
+	bool bFoundItem = false;
+	for (int i = 0; i < Resources.Num(); ++i)
+	{
+		FResourceData& ResourceData = Resources[i];
+		if (ResourceData.ResourceTag.MatchesTagExact(ResourceTag))
+		{
+			ResourceData.ResourceCount += Count;
+			bFoundItem = true;
+			break;
+		}
+	}
+	
+	if (!bFoundItem)
+	{
+		FResourceData NewData;
+		NewData.ResourceTag = ResourceTag;
+		NewData.ResourceCount = Count;
+		
+		Resources.Add(NewData);
+	}
+	
+	OnRep_Resources(PreviousResources);
 	
 	return true;
 }
 
 bool UInventoryComponent::ConsumeResource(const FGameplayTag& ResourceTag, const int Count)
 {
-	const bool bSuccess = Resources.ConsumeResource(ResourceTag, Count);
+	TArray<FResourceData> PreviousResources = Resources;
+	
+	bool bSuccess = false;
+	for (int i = 0; i < Resources.Num(); ++i)
+	{
+		FResourceData& Data = Resources[i];
+		if (Data.ResourceTag.MatchesTagExact(ResourceTag))
+		{
+			if (Data.ResourceCount > Count)
+			{
+				Data.ResourceCount -= Count;
+				bSuccess = true;
+			}
+			else if (Data.ResourceCount == Count)
+			{
+				Resources.RemoveAt(i);
+				bSuccess = true;
+			}
+			
+			break;
+		}
+	}
 
 	if (bSuccess)
 	{
-		OnResourceChangedDelegate.Broadcast(ResourceTag, -Count, Resources.GetResourceCount(ResourceTag));
+		OnRep_Resources(PreviousResources);
 	}
 	
 	return bSuccess;
@@ -196,7 +244,18 @@ bool UInventoryComponent::ConsumeResource(const FGameplayTag& ResourceTag, const
 
 int UInventoryComponent::GetResourceCount(const FGameplayTag& ResourceTag) const
 {
-	return Resources.GetResourceCount(ResourceTag);
+	int Count = 0;
+
+	for (int i = 0; i < Resources.Num(); ++i)
+	{
+		if (Resources[i].ResourceTag == ResourceTag)
+		{
+			Count = Resources[i].ResourceCount;
+			break;
+		}
+	}
+	
+	return Count;
 }
 
 AInventoryItem* UInventoryComponent::GetItemByIndex(const int Index) const
@@ -246,22 +305,36 @@ int UInventoryComponent::GetMaxItemAmount(const EInventoryItem::Type& Type)
 	return Result;
 }
 
-void UInventoryComponent::OnRep_Resources(const FResources& PreviousResources)
+void UInventoryComponent::OnRep_Resources(const TArray<FResourceData>& PreviousResources)
 {
-	FResources CurrentResources = Resources;
-
-	for (int i = 0; i < CurrentResources.GetResourcesNum(); ++i)
+	TMap<FGameplayTag, int> ResourceDelta;
+	
+	//Assume all resources are being removed until they appear in the current resources
+	for (int i = 0; i < PreviousResources.Num(); i++)
 	{
-		FResourceData& CurrentData = CurrentResources.GetResourceAt(i);
-		const int PreviousCount = PreviousResources.GetResourceCount(CurrentData.ResourceTag);
+		const FResourceData& PreviousData = PreviousResources[i];
+		ResourceDelta.Add(PreviousData.ResourceTag, -PreviousData.ResourceCount);
+	}
+	
+	for (int i = 0; i < Resources.Num(); ++i)
+	{
+		FResourceData& CurrentData = Resources[i];
 
-		const int Delta = CurrentData.ResourceCount - PreviousCount;
+		const int PreviousAmount = ResourceDelta.Contains(CurrentData.ResourceTag) ? ResourceDelta[CurrentData.ResourceTag] : 0;
+		
+		const int Delta = CurrentData.ResourceCount + PreviousAmount;
+		ResourceDelta.Remove(CurrentData.ResourceTag);
+		
 		if (Delta != 0)
 		{
 			OnResourceChangedDelegate.Broadcast(CurrentData.ResourceTag, Delta, CurrentData.ResourceCount);
 		}
 	}
-	
+
+	for (auto Delta : ResourceDelta)
+	{
+		OnResourceChangedDelegate.Broadcast(Delta.Key, Delta.Value, 0);
+	}
 }
 
 AController* UInventoryComponent::GetOwnerController() const

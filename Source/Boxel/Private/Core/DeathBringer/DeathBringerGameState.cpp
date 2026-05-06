@@ -53,11 +53,16 @@ ETeamAttitude::Type ADeathBringerGameState::DeathBringerAttitudeSolver(FGenericT
 			{
 				Result = ETeamAttitude::Hostile;
 			}
+			break;
 		}
 		//Every one is hostile to deathbringers except themselves
 	case EDeathBringerTeam::DeathBringer:
 		{
-			Result = ETeamAttitude::Hostile;
+			if (B != EDeathBringerTeam::DeathBringer)
+			{
+				Result = ETeamAttitude::Hostile;
+			}
+			break;
 		}
 	}
 		

@@ -22,6 +22,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void LoadGame();
 	
+	//TODO: Add a single node to grab or set settings if possible, similar to how GetAttribute node works for GAS
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	float GetMouseSensitivity();
 	UFUNCTION(BlueprintCallable)

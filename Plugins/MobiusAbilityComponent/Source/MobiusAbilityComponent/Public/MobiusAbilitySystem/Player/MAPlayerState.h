@@ -21,5 +21,4 @@ public:
 protected:
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
 	UMobiusAbilitySystemComponent* AbilityComponent;
-	
 };

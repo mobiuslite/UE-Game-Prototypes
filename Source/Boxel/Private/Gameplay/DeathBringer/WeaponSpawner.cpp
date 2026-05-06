@@ -3,9 +3,8 @@
 
 #include "Gameplay/DeathBringer/WeaponSpawner.h"
 
-#include "Core/MobiusGameMode.h"
+#include "Core/MobiusGameState.h"
 #include "Gameplay/Weapons/GunBase.h"
-#include "Kismet/KismetMathLibrary.h"
 
 AWeaponSpawner::AWeaponSpawner()
 {
@@ -70,14 +69,14 @@ void AWeaponSpawner::BeginPlay()
 			SpawnedActors.Add(NewResourceData);
 		}
 		
-		if (AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>())
+		if (AMobiusGameState* GameState = GetWorld()->GetGameState<AMobiusGameState>())
 		{
-			GameMode->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::AUTH_OnRoundReset);
+			GameState->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::OnRoundReset);
 		}
 	}
 }
 
-void AWeaponSpawner::AUTH_OnRoundReset()
+void AWeaponSpawner::OnRoundReset()
 {
 	ResetSpawner();
 }

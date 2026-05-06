@@ -25,12 +25,8 @@ public:
 	AGunBase();
 	virtual void Tick(float DeltaSeconds) override;
 	
-	virtual void OnEquip_Implementation(AController* HolderController) override;
 	virtual void OnUnequip_Implementation(AController* HolderController) override;
-	
-	virtual void OnAddedToInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController) override;
 	virtual void OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController) override;
-	
 	
 	int GetAmmoCount () const { return CurrentClipAmmo; }
 	
@@ -52,9 +48,6 @@ public:
 	FGameplayTag GetFireCueTag() const { return OnFireGameplayCueTag; }
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	USceneComponent* GetMuzzleComponent() const { return MuzzleLocation; }
-	
-	UFUNCTION(BlueprintCallable, BlueprintPure)
-	TSubclassOf<UAnimInstance> GetGunAnimInstanceClass() const { return GunABP; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	TSubclassOf<UGameplayEffect> GetDamageEffectClass() const { return DamageClass; }
@@ -83,9 +76,7 @@ protected:
 	UStaticMeshComponent* GunMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	USceneComponent* MuzzleLocation;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gun|Animation")
-	TSubclassOf<UAnimInstance> GunABP;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gun|Animation")
 	TObjectPtr<UAnimMontage> FireMontage;
 	
@@ -126,14 +117,16 @@ protected:
 	float MaxBulletSpread = 10.0f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy", meta=(Units="DegreesPerSecond"))
 	float SpreadReductionPerSecond = 15.0f;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Recoil", meta=(Units="Degrees"))
+	float RecoilPerBullet = 0.5f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Recoil", meta=(Units="Degrees"))
+	float MaxRecoil = 2.5f;
+	
 	float BulletSpreadAmount;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Abilities")
-	TSubclassOf<UGameplayAbility> GrantedAbilityClass;
-	UPROPERTY(EditDefaultsOnly, Category="Gun|Abilities")
 	TSubclassOf<UGameplayEffect> DamageClass;
-	UPROPERTY()
-	FGameplayAbilitySpecHandle AbilityHandle;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Gun|FXs")
 	FGameplayTag OnFireGameplayCueTag;

@@ -27,6 +27,30 @@ namespace EDeathBringerTeam
 }
 
 
+USTRUCT(BlueprintType)
+struct FDeathBringerGameModeSettings
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	float DeathBringerPlayerRatio = 0.25f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int MinDeathBringers = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int MinDeathBringersForSaviour = 2;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int CurrencyStartAmount = 2;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int MinPlayers = 3;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Seconds"))
+	float StartGameWaitTime = 5.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Seconds"))
+	float EndGameWaitTime = 5.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Minutes"))
+	float GameLengthMinutes = 5.0f;
+};
+
 /*
 	MustSpectate is overridden in the BP class to make players joining while game is active force to spectate. 
 	For some reason you can't override any of the spawn to spectate code in c++ afaik...
@@ -71,23 +95,15 @@ protected:
 	void SetRoundState(const EDeathBringerRoundState::Type RoundState);
 	EDeathBringerRoundState::Type GetRoundState() const;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	float DeathBringerPlayerRatio = 0.25f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int MinDeathBringers = 1;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int MinDeathBringersForSaviour = 2;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int CurrencyStartAmount = 2;
+	const FDeathBringerGameModeSettings& GetGameModeSettings() const;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int MinPlayers = 3;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Seconds"))
-	float StartGameWaitTime = 5.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Seconds"))
-	float EndGameWaitTime = 5.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(Units="Minutes"))
-	float GameLengthMinutes = 5.0f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	FDeathBringerGameModeSettings ShippingGameModeSettings;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	bool bUseDebugSettings;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (EditCondition = "bUseDebugSettings"))
+	FDeathBringerGameModeSettings DebugGameModeSettings;
 	
 	float GameTimer;
 	

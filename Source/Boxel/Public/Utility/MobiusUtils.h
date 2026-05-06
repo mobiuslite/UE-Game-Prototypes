@@ -18,7 +18,7 @@ public:
 	
 	//Creates start and end location for a trace directly out of the camera looking straight ahead
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	static bool GetCameraTraceLocation(AController* Controller, const float Distance, FVector& OutStartLocation, FVector& OutEndLocation);
+	static bool GetAimTraceLocation(AController* Controller, const float Distance, FVector& OutStartLocation, FVector& OutEndLocation);
 	
 	//Creates start and end location for a trace directly out of the camera looking straight using the control rotation
 	UFUNCTION(BlueprintCallable, BlueprintPure)
@@ -49,6 +49,15 @@ public:
 	static double StableLerpDouble(const double Current, const double Target, const float Exponent, const float DeltaSeconds)
 	{
 		return FMath::Lerp(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds));
+	}
+	
+	static float StableEaseOutFloat(const float Current, const float Target, const float Exponent, const float DeltaSeconds)
+	{
+		return FMath::InterpEaseOut(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds), 2.0f);
+	}
+	static float StableEaseInFloat(const float Current, const float Target, const float Exponent, const float DeltaSeconds)
+	{
+		return FMath::InterpEaseIn(Current, Target, 1.0f - FMath::Exp(-Exponent * DeltaSeconds), 2.0f);
 	}
 	
 	UFUNCTION(BlueprintCallable)
@@ -152,4 +161,7 @@ public:
 	static bool IsDead(const AActor* Actor);
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	static bool IsAlive(const AActor* Actor);
+	
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
+	static void ServerTravel(const UObject* WorldContextObject, const FString& InURL, bool bAbsolute = false, bool bShouldSkipGameNotify = false);
 };

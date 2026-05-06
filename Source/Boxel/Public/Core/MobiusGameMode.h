@@ -7,7 +7,6 @@
 #include "MobiusGameMode.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDiedSignature, AController*, DeadPlayerController);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRoundHardResetSignature);
 
 UCLASS()
 class BOXEL_API AMobiusGameMode : public AGameModeBase
@@ -24,10 +23,6 @@ public:
 	
 	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
 	FOnPlayerDiedSignature OnPlayerDiedDelegate;
-	
-	//Child gamemodes need to implement this manually. Not automatically called
-	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
-	FOnRoundHardResetSignature OnRoundHardResetDelegate;
 protected:
 	
 	virtual void OnPlayerLogin(AGameModeBase* GameMode, APlayerController* PC) {}

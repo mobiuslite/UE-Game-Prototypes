@@ -19,6 +19,7 @@ protected:
 	virtual void BeginPlay() override;
 	
 	virtual float GetMaxSpeed() const override;
+	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
 
 public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,

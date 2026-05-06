@@ -3,10 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ActiveGameplayEffectHandle.h"
+#include "GameplayAbilitySpecHandle.h"
 #include "UObject/Interface.h"
 #include "InventoryItem.generated.h"
 
 
+class UGameplayEffect;
+class UGameplayAbility;
 class UInventoryComponent;
 
 UENUM(BlueprintType)
@@ -56,9 +60,15 @@ public:
 	void OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController);
 	
 	virtual bool CanBePickedUp(const APawn* PawnHolder) const;
+	virtual bool CanBeDropped() const { return bCanBeDropped; }
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	bool IsHeldInHand() const { return bVisible; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	TEnumAsByte<EInventoryItem::Type> GetItemType() const { return ItemType; }
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	TSubclassOf<UAnimInstance> GetHeldABPClass() const { return HeldABP; }
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
@@ -68,6 +78,14 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly)
 	TEnumAsByte<EInventoryItem::Type> ItemType;
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UGameplayAbility> EquippedGrantedAbilityClass;
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UGameplayEffect> EquippedGrantedEffectClass;
+	UPROPERTY(EditDefaultsOnly)
+	bool bCanBeDropped = true;
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<UAnimInstance> HeldABP;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	APawn* GetHolder() const { return HolderPrivate; }
@@ -92,4 +110,9 @@ private:
 	
 	UPROPERTY()
 	TArray<FHolderHistoryData> HolderHistory;
+	
+	UPROPERTY()
+	FGameplayAbilitySpecHandle AbilityHandle;
+	UPROPERTY()
+	FActiveGameplayEffectHandle EffectHandle;
 };

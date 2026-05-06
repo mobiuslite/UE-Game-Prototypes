@@ -11,8 +11,8 @@
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
+#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 #include "Utility/MobiusUtils.h"
-
 
 AGunBase::AGunBase()
 {
@@ -42,6 +42,11 @@ bool AGunBase::GetGunZoomAmount(float& ZoomAmount) const
 void AGunBase::ApplySpread()
 {
 	BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount + SpreadPerBullet, 0.0f, MaxBulletSpread);
+	
+	if (ABoxelPlayerCharacter* Player = Cast<ABoxelPlayerCharacter>(GetHolder()))
+	{
+		Player->AddRecoil(RecoilPerBullet, MaxRecoil);
+	}
 }
 
 float AGunBase::GetTotalBulletSpread() const
@@ -83,7 +88,16 @@ bool AGunBase::StartReload_Implementation()
 	UInventoryComponent* Inventory;
 	if (!UMobiusUtils::GetInventory(Holder->GetPlayerState(), Inventory)) return false;
 	
-	if (Inventory->GetResourceCount(AmmoResourceTag) == 0) return false;
+	bool bCheckResource = true;
+	if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Holder))
+	{
+		if (ASC->HasMatchingGameplayTag(TAG_Resources_IgnoreCost))
+		{
+			bCheckResource = false;
+		}
+	}
+	
+	if (bCheckResource && Inventory->GetResourceCount(AmmoResourceTag) == 0) return false;
 	
 	ReloadTimer = ReloadDuration;
 	
@@ -136,7 +150,20 @@ void AGunBase::FinishedReloading_Implementation()
 	UInventoryComponent* Inventory;
 	if (UMobiusUtils::GetInventory(GetHolder()->GetPlayerState<APlayerState>(), Inventory))
 	{
-		Inventory->ConsumeResource(AmmoResourceTag, 1);
+		bool bShouldConsume = true;
+		
+		if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetHolder()))
+		{
+			if (ASC->HasMatchingGameplayTag(TAG_Resources_IgnoreCost))
+			{
+				bShouldConsume = false;
+			}
+		}
+		
+		if (bShouldConsume)
+		{
+			Inventory->ConsumeResource(AmmoResourceTag, 1);
+		}
 	}
 	
 	CurrentClipAmmo = AmmoPerClip;
@@ -158,7 +185,16 @@ void AGunBase::Server_RequestReload_Implementation()
 	UInventoryComponent* Inventory;
 	if (!UMobiusUtils::GetInventory(Holder->GetPlayerState(), Inventory)) return;
 	
-	if (Inventory->GetResourceCount(AmmoResourceTag) == 0) return;
+	bool bCheckResource = true;
+	if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Holder))
+	{
+		if (ASC->HasMatchingGameplayTag(TAG_Resources_IgnoreCost))
+		{
+			bCheckResource = false;
+		}
+	}
+	
+	if (bCheckResource && Inventory->GetResourceCount(AmmoResourceTag) == 0) return;
 	
 	ReloadTimer = ReloadDuration;
 }
@@ -189,38 +225,11 @@ void AGunBase::Tick(float DeltaSeconds)
 	}
 }
 
-void AGunBase::OnEquip_Implementation(AController* HolderController)
-{
-	if (HasAuthority())
-	{
-		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
-		{
-			AbilityHandle = AbilityComp->K2_GiveAbility(GrantedAbilityClass, 0, 1);
-		}
-	}
-	
-	Super::OnEquip_Implementation(HolderController);
-}
-
 void AGunBase::OnUnequip_Implementation(AController* HolderController)
 {
-	if (HasAuthority())
-	{
-		if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
-		{
-			AbilityComp->ClearAbility(AbilityHandle);
-			AbilityHandle = FGameplayAbilitySpecHandle();
-		}
-	}
-	
 	Super::OnUnequip_Implementation(HolderController);
 	
 	CancelReloading();
-}
-
-void AGunBase::OnAddedToInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController)
-{
-	Super::OnAddedToInventory_Implementation(Inventory, HolderController);
 }
 
 void AGunBase::OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController)

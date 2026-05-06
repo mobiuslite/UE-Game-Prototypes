@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "DeathBringerGameMode.h"
 #include "GenericTeamAgentInterface.h"
-#include "GameFramework/GameStateBase.h"
+#include "Core/MobiusGameState.h"
 #include "DeathBringerGameState.generated.h"
 
 UENUM()
@@ -24,7 +24,7 @@ namespace EDeathBringerRoundState
 }
 
 UCLASS()
-class BOXEL_API ADeathBringerGameState : public AGameStateBase
+class BOXEL_API ADeathBringerGameState : public AMobiusGameState
 {
 	GENERATED_BODY()
 	

@@ -10,7 +10,7 @@
 #include "Gameplay/Player/BoxelPlayerState.h"
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 
-bool UMobiusUtils::GetCameraTraceLocation(AController* Controller, float const Distance, FVector& OutStartLocation, FVector& OutEndLocation)
+bool UMobiusUtils::GetAimTraceLocation(AController* Controller, float const Distance, FVector& OutStartLocation, FVector& OutEndLocation)
 {
 	const APlayerController* PlayerController = Cast<APlayerController>(Controller);
 	
@@ -143,4 +143,11 @@ bool UMobiusUtils::IsDead(const AActor* Actor)
 bool UMobiusUtils::IsAlive(const AActor* Actor)
 {
 	return !IsDead(Actor);
+}
+
+void UMobiusUtils::ServerTravel(const UObject* WorldContextObject, const FString& InURL, bool bAbsolute, bool bShouldSkipGameNotify)
+{
+	if (!WorldContextObject || !WorldContextObject->GetWorld()) return;
+	
+	WorldContextObject->GetWorld()->ServerTravel(InURL, bAbsolute, bShouldSkipGameNotify);
 }

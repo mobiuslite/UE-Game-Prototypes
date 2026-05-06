@@ -1,6 +1,7 @@
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 
 #include "AbilitySystemGlobals.h"
+#include "AbilitySystemLog.h"
 #include "GameplayCueManager.h"
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 #include "GameFramework/PlayerState.h"
@@ -8,6 +9,9 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_AbilityInputBlocked, "Gameplay.AbilityInputBlocked");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_Invincible, "Gameplay.Invincible");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Damage_Forced, "Gameplay.Damage.Forced");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Resources_IgnoreCost, "Gameplay.Resources.IgnoreCost");
+
 
 UMobiusAbilitySystemComponent::UMobiusAbilitySystemComponent()
 {
@@ -77,6 +81,25 @@ void UMobiusAbilitySystemComponent::ClearAbilityInput()
 	InputsHeld.Empty();
 }
 
+FGameplayAbilitySpecHandle UMobiusAbilitySystemComponent::K2_GiveAbility(TSubclassOf<UGameplayAbility> AbilityClass,
+	int32 Level, int32 InputID, UObject* SourceObject)
+{
+	// build and validate the ability spec
+	FGameplayAbilitySpec AbilitySpec = BuildAbilitySpecFromClass(AbilityClass, Level, InputID);
+	AbilitySpec.SourceObject = SourceObject;
+
+	// validate the class
+	if (!IsValid(AbilitySpec.Ability))
+	{
+		ABILITY_LOG(Error, TEXT("K2_GiveAbility() called with an invalid Ability Class."));
+
+		return FGameplayAbilitySpecHandle();
+	}
+
+	// grant the ability and return the handle. This will run validation and authority checks
+	return GiveAbility(AbilitySpec);
+}
+
 void UMobiusAbilitySystemComponent::ExecuteGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters & GameplayCueParameters)
 {
 	UAbilitySystemGlobals::Get().GetGameplayCueManager()->HandleGameplayCue(GetOwner(), GameplayCueTag, EGameplayCueEvent::Type::Executed, GameplayCueParameters);
@@ -106,6 +129,17 @@ void UMobiusAbilitySystemComponent::ResetAttributes()
 	
 	const float CurrentHealth = GetNumericAttribute(UMACommonAttributeSet::GetCurrentHealthAttribute());
 	OnHealthChanged.Broadcast(CurrentHealth, CurrentHealth, CurrentHealth);
+}
+
+void UMobiusAbilitySystemComponent::Suicide(const bool bForce)
+{
+	if (!GetOwner()->HasAuthority()) return;
+	if (HasMatchingGameplayTag(TAG_Gameplay_Invincible) && !bForce) return;
+	
+	const FGameplayEffectContextHandle Context = FGameplayEffectContextHandle(UAbilitySystemGlobals::Get().AllocGameplayEffectContext());
+	const FGameplayEffectSpec Spec(SuicideGameplayEffectClass->GetDefaultObject<UGameplayEffect>(), Context, 0.0f);
+	
+	ApplyGameplayEffectSpecToSelf(Spec);
 }
 
 void UMobiusAbilitySystemComponent::OnAttributeSetHealthChanged(float EffectMagnitude, float OldValue, float NewValue)

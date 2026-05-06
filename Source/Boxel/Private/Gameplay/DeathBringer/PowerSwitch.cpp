@@ -3,7 +3,7 @@
 
 #include "Gameplay/DeathBringer/PowerSwitch.h"
 
-#include "Core/MobiusGameMode.h"
+#include "Core/MobiusGameState.h"
 #include "Gameplay/DeathBringer/TeamTester.h"
 #include "Net/UnrealNetwork.h"
 #include "Utility/MobiusUtils.h"
@@ -12,6 +12,7 @@ APowerSwitch::APowerSwitch()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+	bAlwaysRelevant = true;
 }
 
 void APowerSwitch::SetPowered(const bool bPower)
@@ -20,43 +21,40 @@ void APowerSwitch::SetPowered(const bool bPower)
 	OnRep_Powered();
 }
 
+void APowerSwitch::SetBroken(const bool bBroke)
+{
+	bBroken = bBroke;
+}
+
 void APowerSwitch::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ThisClass, bPowered);
+	DOREPLIFETIME(ThisClass, bBroken);
 }
 
 void APowerSwitch::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if (PowerSwitchID > -1)
+	if (ATeamTester* Tester = UMobiusUtils::GetActorOfClassEX<ATeamTester>(GetWorld(), ATeamTester::StaticClass()))
 	{
-		const TArray<ATeamTester*> Testers = UMobiusUtils::GetAllActorsOfClassEX<ATeamTester>(GetWorld(), ATeamTester::StaticClass());
-		for (int i = 0; i < Testers.Num(); ++i)
-		{
-			ATeamTester* Tester = Testers[i];
-			if (!Tester) continue;
-		
-			if (Tester->GetPowerSwitchID() == PowerSwitchID)
-			{
-				Tester->SetPowerSwitch(this);
-			}
-		}
+		Tester->SetPowerSwitch(this);
 	}
 	
-	if (AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>())
+	if (AMobiusGameState* GameState = GetWorld()->GetGameState<AMobiusGameState>())
 	{
-		GameMode->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::AUTH_OnRoundReset);
+		GameState->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::OnRoundReset);
 	}
 }
 
-void APowerSwitch::AUTH_OnRoundReset()
+void APowerSwitch::OnRoundReset()
 {
 	SetPowered(false);
 }
 
 void APowerSwitch::OnRep_Powered_Implementation()
 {
+	OnPoweredStateChanged.Broadcast(bPowered);
 }
 

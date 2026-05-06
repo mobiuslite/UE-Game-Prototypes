@@ -48,7 +48,7 @@ protected:
 	float SpreadAmount = 50.0f;
 	
 	UFUNCTION()
-	void AUTH_OnRoundReset();
+	void OnRoundReset();
 	
 private:
 	

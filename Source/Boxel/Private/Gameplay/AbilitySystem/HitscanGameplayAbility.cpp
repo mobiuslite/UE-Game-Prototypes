@@ -5,7 +5,6 @@
 
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "AbilitySystemGlobals.h"
 #include "GameplayCueFunctionLibrary.h"
 #include "Gameplay/Weapons/GunBase.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -77,9 +76,9 @@ void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbili
 		//Muzzle Cue
 		FGameplayCueParameters Params;
 		Params.TargetAttachComponent = Gun->GetMuzzleComponent();
-		Params.Location = Gun->GetMuzzleComponent()->GetComponentLocation();
+		Params.Location = HitResult.Location;
 		Params.Instigator = GetAvatarActorFromActorInfo();
-		Params.Normal = (HitResult.TraceEnd - Gun->GetMuzzleComponent()->GetComponentLocation()).GetSafeNormal();
+		Params.Normal = (HitResult.Location - Gun->GetMuzzleComponent()->GetComponentLocation()).GetSafeNormal();
 		
 		if (IsLocallyControlled() && !HasAuthority(&CurrentActivationInfo))
 		{
@@ -167,7 +166,7 @@ TArray<FHitResult> UHitscanGameplayAbility::PerformLocalTargeting()
 		FRangedWeaponFiringInput InputData;
 		
 		const float Range = 99999.0f;
-		UMobiusUtils::GetCameraControlTraceLocation(AvatarPawn->GetController(), Range, InputData.StartTrace, InputData.EndTrace);
+		UMobiusUtils::GetAimTraceLocation(AvatarPawn->GetController(), Range, InputData.StartTrace, InputData.EndTrace);
 		
 		InputData.AimDir = (InputData.EndTrace - InputData.StartTrace).GetSafeNormal();
 

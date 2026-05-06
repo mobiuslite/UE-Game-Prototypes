@@ -3,10 +3,9 @@
 
 #include "Gameplay/DeathBringer/TeamTester.h"
 
-#include "Core/MobiusGameMode.h"
+#include "Core/MobiusGameState.h"
 #include "Gameplay/DeathBringer/PowerSwitch.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
-#include "Net/UnrealNetwork.h"
 
 
 ATeamTester::ATeamTester()
@@ -62,9 +61,9 @@ void ATeamTester::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if (AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>())
+	if (AMobiusGameState* GameState = GetWorld()->GetGameState<AMobiusGameState>())
 	{
-		GameMode->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::AUTH_OnRoundReset);
+		GameState->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::AUTH_OnRoundReset);
 	}
 }
 

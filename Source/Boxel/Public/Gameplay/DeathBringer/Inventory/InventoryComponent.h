@@ -39,6 +39,7 @@ struct FResources : public FFastArraySerializer
 	
 	int GetResourceCount(const FGameplayTag& Tag) const;
 	int GetResourcesNum() const { return Resources.Num(); }
+	const FResourceData& GetResourceAt(const int Index) const { return Resources[Index]; }
 	FResourceData& GetResourceAt(const int Index) { return Resources[Index]; }
 	
 protected:
@@ -95,7 +96,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	int GetIndexOfItem(const AInventoryItem* Item) const;
 	
-	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 protected:
@@ -111,14 +111,18 @@ protected:
 	
 	UPROPERTY(Replicated)
 	TArray<AInventoryItem*> Items;
-	UPROPERTY(ReplicatedUsing=OnRep_Resources)
-	FResources Resources;
 	
+	//TODO: See if just using a regular array fixes it, brings it down to either my data struct or the fast array itself
+	UPROPERTY(ReplicatedUsing=OnRep_Resources)
+	TArray<FResourceData> Resources;
+	UFUNCTION()
+	void OnRep_Resources(const TArray<FResourceData>& PreviousResources);
+	
+	//TODO: Optimization, use a map of FGameplayTags as the container for delegates, so that delegates only get the callback for
+	//the tag they want, and not every tag. Should be fine for now with such small amounts of resources, but if we have a lot it will become an issue
+	//GAS does the same thing for effect added/removed callbacks
 	UPROPERTY(BlueprintAssignable)
 	FOnResourceChangedSignature OnResourceChangedDelegate;
-	
-	UFUNCTION()
-	void OnRep_Resources(const FResources& PreviousResources);
 	
 	//Gets the physical representation of the owner
 	UFUNCTION(BlueprintCallable, BlueprintPure)

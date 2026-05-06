@@ -6,6 +6,8 @@
 #include "MobiusAbilitySystem/Player/MACharacter.h"
 #include "BoxelPlayerCharacter.generated.h"
 
+class ABoxelPlayerState;
+class UCameraComponent;
 class AInventoryItem;
 class UGameplayAbility;
 class UInventoryComponent;
@@ -33,6 +35,14 @@ struct FDeadPlayerInfo
 	FString KilledByWeaponName;
 };
 
+USTRUCT()
+struct FCameraFOVEffect
+{
+	GENERATED_BODY()
+	float Timer;
+	float Strength;
+};
+
 UCLASS()
 class BOXEL_API ABoxelPlayerCharacter : public AMACharacter, public IInteractable
 {
@@ -42,12 +52,14 @@ public:
 	ABoxelPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 	
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void Tick(float DeltaTime) override;
+	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual void Landed(const FHitResult& Hit) override;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	AInventoryItem* GetHeldItem() const { return HeldItem; }
+	void SetPlayerUnarmed();
+	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool IsAiming() const { return AimToastId != INDEX_NONE; }
 	
@@ -55,11 +67,15 @@ public:
 	bool PickUpItem(AInventoryItem* Item, const bool bConceal = false);
 	UFUNCTION(Server, Reliable)
 	void DropHeldGun(const bool bThrow = true);
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable)
 	void DropAllItems();
 	
 	UPROPERTY(BlueprintReadWrite)
 	FRotator ExtraViewRotation;
+	
+	UFUNCTION()
+	void AddRecoil(const float Amount, const float MaxRecoilAmount);
+	
 	virtual FRotator GetViewRotation() const override;
 
 	//Visuals only
@@ -80,11 +96,19 @@ public:
 	UFUNCTION(Server, Reliable)
 	void Server_PlayerInteracted(UObject* Interactable);
 	
+	UFUNCTION(BlueprintCallable)
+	void AddFOVEffect(const float Strength, const float Duration, const bool bInstantSet = false);
+	
 protected:
 	virtual void BeginPlay() override;
 	
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_PlayerState() override;
+	
+	UFUNCTION(BlueprintNativeEvent)
+	void OnLocalPlayerStateReady(ABoxelPlayerState* LocalPlayerState);
+	UFUNCTION(BlueprintNativeEvent)
+	void OnProxyPlayerStateReady(ABoxelPlayerState* ProxyPlayerState);
 	
 	UFUNCTION(BlueprintNativeEvent)
 	void OnTriggerPressed();
@@ -115,6 +139,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Weapons")
 	TSubclassOf<AGunBase> StartingGunClass;
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Weapons")
+	float RecoilRecoverDuration = 0.67f;
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Weapons")
+	float RecoilLerpSpeed = 7.0f;
 	
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|UI")
 	float PreviewPlayerInfoDistance = 300.0f;
@@ -199,6 +227,15 @@ protected:
 	UPROPERTY()
 	FGameplayAbilitySpecHandle UnarmedAbilityHandle;
 	
+	UPROPERTY()
+	UCameraComponent* PlayerCamera;
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Camera")
+	float FOVChangeSpeed = 5.0f;
+	
+	float RecoilTarget;
+	float CurrentRecoilAmount;
+	float RecoilRecoverTimer;
+	
 private:
 	
 	void MoveInput(const FInputActionValue& Value);
@@ -227,10 +264,15 @@ private:
 	
 	void PauseInput(const FInputActionValue& Value);
 	
-	float CurrentZoomAmount;
+	float CurrentZoomAmount = 1.0f;
 	void CleanupToasts();
 	
 	void SetSpeaking(const bool bSpeaking, const bool bTeamSpeaking);
+	
+	UPROPERTY()
+	TArray<FCameraFOVEffect> FOVEffects;
+	
+	float CurrentCameraFOV;
 	
 public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

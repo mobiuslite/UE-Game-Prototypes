@@ -40,8 +40,6 @@ void UGunGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handl
 
 void UGunGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	UE_LOG(LogTemp, Log, TEXT("Ended Ability"));
-	
 	if (IsEndAbilityValid(Handle, ActorInfo))
 	{
 		if (ScopeLockCount > 0)
@@ -91,11 +89,5 @@ void UGunGameplayAbility::OnAutoTimerComplete()
 
 AGunBase* UGunGameplayAbility::GetGunActor() const
 {
-	const APlayerState* OwningActor = Cast<APlayerState>(GetOwningActorFromActorInfo());
-	if (!OwningActor) return nullptr;
-	
-	const ABoxelPlayerCharacter* BoxelPlayer = OwningActor->GetPawn<ABoxelPlayerCharacter>();
-	if (!BoxelPlayer) return nullptr;
-	
-	return Cast<AGunBase>(BoxelPlayer->GetHeldItem());
+	return Cast<AGunBase>(GetSourceObject(CurrentSpecHandle, CurrentActorInfo));
 }

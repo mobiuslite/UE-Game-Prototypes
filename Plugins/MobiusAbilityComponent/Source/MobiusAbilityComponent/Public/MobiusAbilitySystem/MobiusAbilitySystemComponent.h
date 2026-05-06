@@ -4,12 +4,15 @@
 #include "AbilitySystemComponent.h"
 #include "NativeGameplayTags.h"
 #include "Attributes/MACommonAttributeSet.h"
+#include "Utils/SuicideGameplayEffect.h"
 
 #include "MobiusAbilitySystemComponent.generated.h"
 
 
 MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gameplay_AbilityInputBlocked);
 MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gameplay_Invincible);
+MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Damage_Forced);
+MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Resources_IgnoreCost);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), BlueprintType)
 class MOBIUSABILITYCOMPONENT_API UMobiusAbilitySystemComponent : public UAbilitySystemComponent
@@ -24,6 +27,8 @@ public:
 	virtual void ProcessAbilityInput(const float DeltaTime, const bool bGamePaused);
 	virtual void ClearAbilityInput();
 	
+	FGameplayAbilitySpecHandle K2_GiveAbility(TSubclassOf<UGameplayAbility> AbilityClass, int32 Level= 0, int32 InputID = -1, UObject* SourceObject = nullptr);
+	
 	UFUNCTION(BlueprintCallable, Category = "GameplayCue", Meta = (AutoCreateRefTerm = "GameplayCueParameters", GameplayTagFilter = "GameplayCue"))
 	void ExecuteGameplayCueLocal(const FGameplayTag GameplayCueTag, const FGameplayCueParameters& GameplayCueParameters);
 	UFUNCTION(BlueprintCallable, Category = "GameplayCue", Meta = (AutoCreateRefTerm = "GameplayCueParameters", GameplayTagFilter = "GameplayCue"))
@@ -34,6 +39,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void ResetAttributes();
 	
+	void Suicide(const bool bForce);
+	
 	UPROPERTY(BlueprintAssignable)
 	mutable FMAAttributeEvent OnHealthChanged;
 	
@@ -43,6 +50,9 @@ protected:
 	
 	UPROPERTY()
 	TArray<int32> InputsHeld;
+	
+	UPROPERTY()
+	TSubclassOf<UGameplayEffect> SuicideGameplayEffectClass = USuicideGameplayEffect::StaticClass();
 	
 	UFUNCTION()
 	void OnAttributeSetHealthChanged(float EffectMagnitude, float OldValue, float NewValue);

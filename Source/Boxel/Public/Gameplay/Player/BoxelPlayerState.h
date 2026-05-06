@@ -53,6 +53,14 @@ public:
 	UInventoryComponent* InventoryComponent;
 	virtual UInventoryComponent* GetInventory() const override;
 	
+	//We do this instead of normal replication so that people who aren't on the same team don't receive the message for it.
+	UFUNCTION(Client, Reliable)
+	void SetTeammates(const FGenericTeamId& Team, const TArray<ABoxelPlayerState*>& TeammatesPlayerStates);
+	
+	UFUNCTION(BlueprintNativeEvent)
+	void OnLocalPlayerStateReady();
+	UFUNCTION(BlueprintNativeEvent)
+	void OnProxyPlayerStateReady();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 protected:
@@ -80,7 +88,7 @@ protected:
 	void BP_SetTeammateSpeaking(const bool bSpeaking, const int64 OtherUserId, const APlayerState* PlayerState);
 	
 	UFUNCTION()
-	void AUTH_OnRoundReset();
+	void OnRoundReset();
 	
 private:
 	

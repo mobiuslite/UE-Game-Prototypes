@@ -24,4 +24,17 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability")
 	static FGameplayEffectSpecHandle MakeSpecSetByCaller(const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FGameplayTag& Tag, const float Value);
+	
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
+	static bool HasLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag);
+	
+	//Returns true if successful in adding or removing. Returns false if failed for any reason, including tag not existing to remove
+	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
+	static bool AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bAllowStacks, bool bShouldReplicate);
+	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
+	static bool RemoveLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bShouldReplicate);
+	
+	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
+	static void Suicide(AActor* Actor, const bool bForce = false);
 };

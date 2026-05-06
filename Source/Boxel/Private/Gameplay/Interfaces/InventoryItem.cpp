@@ -3,7 +3,11 @@
 
 #include "Gameplay/Interfaces/InventoryItem.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/PlayerState.h"
+#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -16,19 +20,7 @@ AInventoryItem::AInventoryItem()
 
 bool AInventoryItem::CanBePickedUp(const APawn* PawnHolder) const
 {
-	bool bResult = true;
-	
-	for (int i = 0; i < HolderHistory.Num(); ++i)
-	{
-		const FHolderHistoryData& History = HolderHistory[i];
-		if (History.PreviousHolder == PawnHolder)
-		{
-			bResult = false;
-			break;
-		}
-	}
-	
-	return bResult;
+	return HolderHistory.Num() == 0;
 }
 
 void AInventoryItem::SetPhysicsEnabled(const bool bEnabled)
@@ -58,11 +50,15 @@ void AInventoryItem::OnRep_Holder()
 	}
 	else
 	{
-		const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
-		DetachFromActor(Rules);
-		
-		//Rotate gun so the side is facing the player that dropped it
-		//GunMesh->AddWorldRotation(FRotator(0.0f, 45.0f, 0.0f));
+		if (CanBeDropped())
+		{
+			const FDetachmentTransformRules Rules = FDetachmentTransformRules(EDetachmentRule::KeepWorld, false); 
+			DetachFromActor(Rules);
+		}
+		else
+		{
+			Destroy();
+		}
 	}
 }
 
@@ -104,15 +100,44 @@ void AInventoryItem::Tick(float DeltaSeconds)
 	}
 }
 
-// Add default functionality here for any IInventoryItem functions that are not pure virtual.
 void AInventoryItem::OnEquip_Implementation(AController* HolderController)
 {
+	if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>())))
+	{
+		if (HasAuthority() && IsValid(EquippedGrantedAbilityClass))
+		{
+			AbilityHandle = AbilityComp->K2_GiveAbility(EquippedGrantedAbilityClass, 0, 1, this);
+		}
+		
+		if (IsValid(EquippedGrantedEffectClass))
+		{
+			const FGameplayEffectContextHandle Context = FGameplayEffectContextHandle(UAbilitySystemGlobals::Get().AllocGameplayEffectContext());
+			
+			const FGameplayEffectSpec	Spec(EquippedGrantedEffectClass->GetDefaultObject<UGameplayEffect>(), Context, 0.0f);
+			EffectHandle = AbilityComp->ApplyGameplayEffectSpecToSelf(Spec);
+		}
+	}
+	
 	bVisible = true;
 	OnRep_Visible();
 }
 
 void AInventoryItem::OnUnequip_Implementation(AController* HolderController)
 {
+	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HolderController->GetPlayerState<APlayerState>()))
+	{
+		if (HasAuthority() && AbilityHandle.IsValid())
+		{
+			AbilityComp->ClearAbility(AbilityHandle);
+			AbilityHandle = FGameplayAbilitySpecHandle();
+		}
+			
+		if (EffectHandle.IsValid())
+		{
+			AbilityComp->RemoveActiveGameplayEffect(EffectHandle);
+		}
+	}
+	
 	bVisible = false;
 	OnRep_Visible();
 }

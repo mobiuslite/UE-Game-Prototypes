@@ -3,8 +3,10 @@
 
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 
 FGameplayEffectSpecHandle UMAUtils::MakeHitDamageSpec(UAbilitySystemComponent* AbilityComponent,
                                                       UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FHitResult& HitResult, AActor* Causer)
@@ -45,4 +47,56 @@ FGameplayEffectSpecHandle UMAUtils::MakeSpecSetByCaller(const TSubclassOf<UGamep
 	Spec.Data->SetSetByCallerMagnitude(Tag, Value);
 	
 	return Spec;
+}
+
+bool UMAUtils::HasLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag)
+{
+	if (const UAbilitySystemComponent* AbilitySysComp = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor))
+	{
+		return AbilitySysComp->HasMatchingGameplayTag(GameplayTag);
+	}
+	
+	return false;
+}
+
+bool UMAUtils::AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bAllowStacks,
+	bool bShouldReplicate)
+{
+	if (UAbilitySystemComponent* AbilitySysComp = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor))
+	{
+		if (!bAllowStacks && AbilitySysComp->HasMatchingGameplayTag(GameplayTag))
+		{
+			return false;
+		}
+		
+		AbilitySysComp->AddLooseGameplayTag(GameplayTag, 1, bShouldReplicate ? EGameplayTagReplicationState::CountToOwner : EGameplayTagReplicationState::None);
+		return true;
+	}
+
+	return false;
+}
+
+bool UMAUtils::RemoveLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag,
+	bool bShouldReplicate)
+{
+	if (UAbilitySystemComponent* AbilitySysComp = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor))
+	{
+		if (!AbilitySysComp->HasMatchingGameplayTag(GameplayTag))
+		{
+			return false;
+		}
+		
+		AbilitySysComp->RemoveLooseGameplayTag(GameplayTag, 1, bShouldReplicate ? EGameplayTagReplicationState::CountToOwner : EGameplayTagReplicationState::None);
+		return true;
+	}
+
+	return false;
+}
+
+void UMAUtils::Suicide(AActor* Actor, const bool bForce)
+{
+	if (UMobiusAbilitySystemComponent* AbilitySysComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor)))
+	{
+		AbilitySysComp->Suicide(bForce);
+	}
 }

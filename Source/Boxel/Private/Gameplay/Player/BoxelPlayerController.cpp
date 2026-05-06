@@ -3,15 +3,20 @@
 
 #include "Boxel/Public/Gameplay/Player/BoxelPlayerController.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "Core/DeathBringer/DeathBringerGameMode.h"
+#include "Core/Lobby/LobbyGameMode.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "Gameplay/DeathBringer/StoreItemWorldActor.h"
 #include "Gameplay/DeathBringer/Inventory/DeathBringerItemDataAsset.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Interfaces/InventoryItem.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
+#include "MobiusAbilitySystem/Utils/MAUtils.h"
 #include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
 
@@ -42,26 +47,54 @@ void ABoxelPlayerController::RequestItemPurchase_Implementation(const UDeathBrin
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	
-	//Spawn the gun super high in the air, because if it's spawned on a player they pick it up before the PickUpItem below is run.
-	//Look into a better way of doing this? Deferred construction won't work because we need all the components to be ready when the player picks it up at all
-	const FVector ItemSpawnLocation = FVector(100000.0f);
-	AInventoryItem* NewItem = GetWorld()->SpawnActor<AInventoryItem>(Data->ItemClass, ItemSpawnLocation, FRotator::ZeroRotator, Params);
-	ensure(IsValid(NewItem));
-	
-	//Items bought from a store need to be destroyed upon round reset, so lets make them transient
-	if (ADeathBringerGameMode* GameMode = GetWorld()->GetAuthGameMode<ADeathBringerGameMode>())
+	if (Data->ItemClass)
 	{
-		GameMode->AddTransientActor(Cast<AActor>(NewItem));
+		//Spawn the gun super high in the air, because if it's spawned on a player they pick it up before the PickUpItem below is run.
+		//Look into a better way of doing this? Deferred construction won't work because we need all the components to be ready when the player picks it up at all
+		const FVector ItemSpawnLocation = FVector(100000.0f);
+		AInventoryItem* NewItem = GetWorld()->SpawnActor<AInventoryItem>(Data->ItemClass, ItemSpawnLocation, FRotator::ZeroRotator, Params);
+		ensure(IsValid(NewItem));
+	
+		//Items bought from a store need to be destroyed upon round reset, so lets make them transient
+		if (ADeathBringerGameMode* GameMode = GetWorld()->GetAuthGameMode<ADeathBringerGameMode>())
+		{
+			GameMode->AddTransientActor(Cast<AActor>(NewItem));
+		}
+	
+		//If failed to pick up, just place the item at the player
+		const bool bSuccess = BoxelCharacter->PickUpItem(NewItem, Data->bConcealOnPurchase);
+		if (!bSuccess)
+		{
+			if (AActor* Actor = Cast<AActor>(NewItem))
+			{
+				Actor->SetActorLocation(BoxelCharacter->GetActorLocation() + (BoxelCharacter->GetActorForwardVector() * 100.0f));
+			}
+		}
 	}
 	
-	//If failed to pick up, just place the item at the player
-	const bool bSuccess = BoxelCharacter->PickUpItem(NewItem, Data->bConcealOnPurchase);
-	if (!bSuccess)
+	if (Data->WorldActorClass)
 	{
-		if (AActor* Actor = Cast<AActor>(NewItem))
+		AStoreItemWorldActor* NewActor = GetWorld()->SpawnActor<AStoreItemWorldActor>(Data->WorldActorClass, 
+			BoxelCharacter->GetActorLocation() + (BoxelCharacter->GetActorForwardVector() * 50.0f), FRotator::ZeroRotator, Params);
+		NewActor->Initialize(BoxelCharacter);
+		
+		ensure(IsValid(NewActor));
+	}
+}
+
+void ABoxelPlayerController::LeaveLobbyArena_Implementation()
+{
+	if (!UMAUtils::HasLooseGameplayTagEX(this, TAG_Lobby_InArena)) return;
+	
+	if (ALobbyGameMode* GameMode = GetWorld()->GetAuthGameMode<ALobbyGameMode>())
+	{
+		//If not spectator, kill player
+		if (StateName == NAME_Playing)
 		{
-			Actor->SetActorLocation(BoxelCharacter->GetActorLocation());
+			UMAUtils::Suicide(this, true);
 		}
+		
+		GameMode->RemovePlayerFromArena(this);
 	}
 }
 

@@ -2,7 +2,7 @@
 
 #include "Gameplay/Player/BoxelPlayerState.h"
 
-#include "Core/MobiusGameMode.h"
+#include "Core/MobiusGameState.h"
 #include "Core/DeathBringer/DeathBringerGameMode.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerController.h"
@@ -70,17 +70,17 @@ bool ABoxelPlayerState::IsRegisteredToVoiceChannel(const uint8 ChannelID)
 
 void ABoxelPlayerState::AUTH_SetTeamId(const FGenericTeamId& NewTeamID)
 {
-	SetGenericTeamId(NewTeamID);
+	if (HasAuthority())
+	{
+		SetGenericTeamId(NewTeamID);
+	}
 }
 
 void ABoxelPlayerState::SetGenericTeamId(const FGenericTeamId& NewTeamID)
 {
-	if (HasAuthority())
-	{
-		const FGenericTeamId OldTeamID = TeamID;
-		TeamID = NewTeamID;
-		OnRep_TeamID(OldTeamID);
-	}
+	const FGenericTeamId OldTeamID = TeamID;
+	TeamID = NewTeamID;
+	OnRep_TeamID(OldTeamID);
 }
 
 FGenericTeamId ABoxelPlayerState::GetGenericTeamId() const
@@ -103,6 +103,18 @@ UInventoryComponent* ABoxelPlayerState::GetInventory() const
 	return InventoryComponent;
 }
 
+void ABoxelPlayerState::SetTeammates_Implementation(const FGenericTeamId& Team,
+	const TArray<ABoxelPlayerState*>& TeammatesPlayerStates)
+{
+	for (int i = 0; i < TeammatesPlayerStates.Num(); i++)
+	{
+		if (ABoxelPlayerState* State = TeammatesPlayerStates[i])
+		{
+			State->SetGenericTeamId(Team);
+		}
+	}
+}
+
 void ABoxelPlayerState::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -114,9 +126,9 @@ void ABoxelPlayerState::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if (AMobiusGameMode* GameMode = GetWorld()->GetAuthGameMode<AMobiusGameMode>())
+	if (AMobiusGameState* GameState = GetWorld()->GetGameState<AMobiusGameState>())
 	{
-		GameMode->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::AUTH_OnRoundReset);
+		GameState->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::OnRoundReset);
 	}
 	
 	//Proximity voice channel
@@ -124,6 +136,16 @@ void ABoxelPlayerState::BeginPlay()
 	
 	//Global voice channel (radio)
 	RegisterVoiceChannel(EDeathBringerTeam::Normal);
+}
+
+void ABoxelPlayerState::OnLocalPlayerStateReady_Implementation()
+{
+	UE_LOG(LogTemp, Display, TEXT("Local player state ready!"))
+}
+
+void ABoxelPlayerState::OnProxyPlayerStateReady_Implementation()
+{
+	UE_LOG(LogTemp, Display, TEXT("Proxy player state ready!"))
 }
 
 void ABoxelPlayerState::Server_SetIsTeamSpeaking_Implementation(const bool bTeamSpeaking)
@@ -149,23 +171,26 @@ void ABoxelPlayerState::Client_SetTeammateIsSpeaking_Implementation(const bool b
 	BP_SetTeammateSpeaking(bTeamSpeaking, UserID, PlayerState);
 }
 
-void ABoxelPlayerState::AUTH_OnRoundReset()
+void ABoxelPlayerState::OnRoundReset()
 {
 	SetGenericTeamId(FGenericTeamId::NoTeam);
-	UnregisterVoiceChannel(DEAD_CHANNELID);
-	
 	SetSpeaking(false, false);
-				
-	UInventoryComponent* Inventory;
-	if (UMobiusUtils::GetInventory(this, Inventory))
-	{
-		Inventory->ClearInventory();
-	}
 			
-	if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(GetAbilitySystemComponent()))
+	if (HasAuthority())
 	{
-		AbilityComp->ResetAttributes();
-		AbilityComp->ClearAllAbilities();
+		UnregisterVoiceChannel(DEAD_CHANNELID);
+		
+		UInventoryComponent* Inventory;
+		if (UMobiusUtils::GetInventory(this, Inventory))
+		{
+			Inventory->ClearInventory();
+		}
+			
+		if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(GetAbilitySystemComponent()))
+		{
+			AbilityComp->ResetAttributes();
+			AbilityComp->ClearAllAbilities();
+		}
 	}
 }
 

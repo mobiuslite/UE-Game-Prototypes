@@ -28,6 +28,9 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void RequestItemPurchase(const UDeathBringerItemDataAsset* Data);
 	
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void LeaveLobbyArena();
+	
 protected:
 	virtual void BeginPlay() override;
 	

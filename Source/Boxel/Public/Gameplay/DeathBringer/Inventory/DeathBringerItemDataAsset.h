@@ -7,6 +7,7 @@
 #include "DeathBringerItemDataAsset.generated.h"
 
 
+class AStoreItemWorldActor;
 class AInventoryItem;
 
 namespace EDeathBringerTeam
@@ -30,6 +31,8 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<AInventoryItem> ItemClass;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<AStoreItemWorldActor> WorldActorClass;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TEnumAsByte<EDeathBringerTeam::Type> RequiredTeam;
 	

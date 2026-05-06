@@ -4,6 +4,7 @@
 #include "Core/MobiusGameMode.h"
 
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
+#include "Kismet/GameplayStatics.h"
 #include "Utility/MobiusUtils.h"
 
 void AMobiusGameMode::StartGame()
@@ -38,4 +39,10 @@ void AMobiusGameMode::BeginPlay()
 	
 	FGameModeEvents::OnGameModePostLoginEvent().AddUObject(this, &ThisClass::OnPlayerLogin);
 	FGameModeEvents::OnGameModeLogoutEvent().AddUObject(this, &ThisClass::OnPlayerLogout);
+	
+	//OnPlayerLogin doesn't get called for the server owner, but we still want them to go through the logic
+	if (APlayerController* ServerController = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	{
+		OnPlayerLogin(this, ServerController);
+	}
 }
