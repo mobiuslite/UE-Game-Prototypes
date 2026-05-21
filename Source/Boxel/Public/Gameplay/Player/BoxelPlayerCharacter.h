@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayAbilitySpecHandle.h"
+#include "GenericTeamAgentInterface.h"
 #include "Gameplay/Interfaces/Interactable.h"
 #include "MobiusAbilitySystem/Player/MACharacter.h"
 #include "BoxelPlayerCharacter.generated.h"
@@ -23,6 +24,11 @@ struct FDeadPlayerInfo
 {
 	GENERATED_BODY()
 	
+	FDeadPlayerInfo()
+	{
+		TeamId = FGenericTeamId::NoTeam;
+	}
+	
 	UPROPERTY(BlueprintReadOnly)
 	int TeamId;
 	
@@ -34,6 +40,20 @@ struct FDeadPlayerInfo
 	UPROPERTY(BlueprintReadOnly)
 	FString KilledByWeaponName;
 };
+
+
+UENUM(BlueprintType)
+namespace EGenericPlayerMessage
+{
+	enum Type : uint8
+	{
+		None,
+	
+		Guilty,
+	
+		COUNT
+	};
+}
 
 USTRUCT()
 struct FCameraFOVEffect
@@ -55,6 +75,11 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual void Landed(const FHitResult& Hit) override;
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	int32 GetFireInputId() const { return 1; }
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	int32 GetCrouchInputId() const { return 2; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	AInventoryItem* GetHeldItem() const { return HeldItem; }
@@ -84,7 +109,12 @@ public:
 	void BP_LocalOnTakeDamage(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead);
 	
 	//Player death logic
-	virtual void Server_OnPlayerDead(const FHitResult& Hit, const AActor* Causer) override;
+	virtual void Server_OnPlayerDead(const FHitResult& Hit, const AController* DamageInstigator, const AActor* DamageCauser) override;
+	virtual void Client_KilledPlayer_Implementation(const APlayerState* KilledPlayerState) override;
+	
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_KilledPlayer(const APlayerState* KilledPlayerState);
+	
 	UFUNCTION(NetMulticast, Reliable)
 	void EnableRagdoll(const FHitResult& Hit);
 	
@@ -99,8 +129,23 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void AddFOVEffect(const float Strength, const float Duration, const bool bInstantSet = false);
 	
+	//Because multiple things can make the player walk (aiming, crouching)
+	//We need to have a tracker of how many things "RequestWalk" has been called
+	//This is so when the player crouches and aims, letting go of aim doesnt cause the player to 
+	//stop walking
+	UFUNCTION(BlueprintCallable)
+	void RequestWalk();
+	UFUNCTION(BlueprintCallable)
+	void RemoveWalkRequest();
+	
+	UFUNCTION(Client, Reliable)
+	void Client_SendGenericMessage(const EGenericPlayerMessage::Type& Message, const TArray<uint8>& Payload);
+	
 protected:
 	virtual void BeginPlay() override;
+	
+	UFUNCTION()
+	void OnRoundReset();
 	
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_PlayerState() override;
@@ -121,7 +166,7 @@ protected:
 	void OnAimReleased();
 
 	UFUNCTION()
-	void OnGunOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
+	void OnItemOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult & SweepResult);
 	
 	//If the pawn wasn't relevant when killed, we still want the player to ragdoll
 	UPROPERTY(ReplicatedUsing=OnRep_IsRagdoll);
@@ -131,7 +176,7 @@ protected:
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HeldItem)
 	AInventoryItem* HeldItem;
-	UFUNCTION()
+	UFUNCTION(BlueprintNativeEvent)
 	void OnRep_HeldItem(const AInventoryItem* LastGun);
 	UFUNCTION(Server, Reliable)
 	void Server_SetHeldItemIndex(const int Index);
@@ -188,9 +233,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* JumpAction;
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
+	UInputAction* CrouchAction;
+	
+	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* FireAction;
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* AimAction;
+	
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
 	UInputAction* DropAction;
 	UPROPERTY(EditDefaultsOnly, Category="BoxelPlayerCharacter|Input|Actions")
@@ -236,6 +285,9 @@ protected:
 	float CurrentRecoilAmount;
 	float RecoilRecoverTimer;
 	
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_OnGenericMessageReceived(const TEnumAsByte<EGenericPlayerMessage::Type>& Message, const TArray<uint8>& Payload);
+	
 private:
 	
 	void MoveInput(const FInputActionValue& Value);
@@ -243,6 +295,9 @@ private:
 	
 	void JumpInput(const FInputActionValue& Value);
 	void JumpInput_Released(const FInputActionValue& Value);
+	
+	void CrouchInput(const FInputActionValue& Value);
+	void CrouchInput_Released(const FInputActionValue& Value);
 	
 	void FireInput(const FInputActionValue& Value);
 	void FireInput_Released(const FInputActionValue& Value);
@@ -273,6 +328,7 @@ private:
 	TArray<FCameraFOVEffect> FOVEffects;
 	
 	float CurrentCameraFOV;
+	int WalkRequests;
 	
 public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

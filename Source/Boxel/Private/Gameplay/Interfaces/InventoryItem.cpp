@@ -73,6 +73,7 @@ void AInventoryItem::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>&
 	
 	DOREPLIFETIME(ThisClass, HolderPrivate);
 	DOREPLIFETIME(ThisClass, bVisible);
+	DOREPLIFETIME(ThisClass, bCanBeDropped);
 }
 
 void AInventoryItem::Tick(float DeltaSeconds)

@@ -17,6 +17,8 @@ class BOXEL_API ABoxelPlayerController : public AMAPlayerController
 	GENERATED_BODY()
 public:
 	
+	ABoxelPlayerController(const FObjectInitializer& ObjectInitializer);
+	
 	UPROPERTY(BlueprintAssignable)
 	FOnSpeakingChangedSignature OnSpeakingChanged;
 	

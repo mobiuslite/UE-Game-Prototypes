@@ -3,16 +3,14 @@
 
 #include "Core/DeathBringer/DeathBringerGameMode.h"
 
-#include "AbilitySystemComponent.h"
-#include "AbilitySystemGlobals.h"
 #include "Core/DeathBringer/DeathBringerGameState.h"
 #include "Utility/MobiusUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "Gameplay/Player/BoxelPlayerState.h"
-#include "Kismet/GameplayStatics.h"
-#include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
+#include "MobiusAbilitySystem/Utils/MAGameplayTags.h"
+#include "MobiusAbilitySystem/Utils/MAUtils.h"
 #include "Utility/MobiusGameplayTags.h"
 
 ADeathBringerGameMode::ADeathBringerGameMode()
@@ -33,6 +31,16 @@ void ADeathBringerGameMode::BeginPlay()
 	SetRoundState(EDeathBringerRoundState::None);
 }
 
+void ADeathBringerGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle);
+	}
+	
+	Super::EndPlay(EndPlayReason);
+}
+
 void ADeathBringerGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -47,8 +55,30 @@ void ADeathBringerGameMode::Tick(float DeltaSeconds)
 	}
 }
 
+AActor* ADeathBringerGameMode::FindPlayerStart_Implementation(AController* Player, const FString& IncomingName)
+{
+	UWorld* World = GetWorld();
+	
+	//REMOVED: Removed default starting spots and made it always pick a new starting spot
+
+	AActor* BestStart = ChoosePlayerStart(Player);
+	if (BestStart == nullptr)
+	{
+		// No player start found
+		UE_LOG(LogGameMode, Log, TEXT("FindPlayerStart: PATHS NOT DEFINED or NO PLAYERSTART with positive rating"));
+
+		// This is a bit odd, but there was a complex chunk of code that in the end always resulted in this, so we may as well just 
+		// short cut it down to this.  Basically we are saying spawn at 0,0,0 if we didn't find a proper player start
+		BestStart = World->GetWorldSettings();
+	}
+
+	return BestStart;
+}
+
 void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 {
+	UE_LOG(LogTemp, Display, TEXT("Preparing game"))
+	
 	const FDeathBringerGameModeSettings& GameSettings = GetGameModeSettings();
 	
 	SetRoundState(EDeathBringerRoundState::Preparing);
@@ -56,6 +86,13 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 
 	if (bHardReset)
 	{
+		UE_LOG(LogTemp, Display, TEXT("Hard resetting game"))
+		
+		if (AMobiusGameState* State = GetGameState<AMobiusGameState>())
+		{
+			State->BroadcastRoundReset();
+		}
+		
 		//Cleans up all remaining players and dead bodies where no controller is posessing them
 		const TArray<ABoxelPlayerCharacter*> PlayerPawns = UMobiusUtils::GetAllActorsOfClassEX<ABoxelPlayerCharacter>(GetWorld(), ABoxelPlayerCharacter::StaticClass());
 		for (int i = 0; i < PlayerPawns.Num(); ++i)
@@ -64,11 +101,6 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 			{
 				BoxelCharacter->Destroy();
 			}
-		}
-		
-		if (AMobiusGameState* State = GetGameState<AMobiusGameState>())
-		{
-			State->BroadcastRoundReset();
 		}
 	}
 	
@@ -89,13 +121,7 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 			PlayerController->ClientGotoState(NAME_Playing);
 			RestartPlayer(PlayerController);
 			
-			if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PlayerController->PlayerState)))
-			{
-				if (!AbilityComp->HasMatchingGameplayTag(TAG_Gameplay_Invincible))
-				{
-					AbilityComp->AddLooseGameplayTag(TAG_Gameplay_Invincible);
-				}
-			}
+			UMAUtils::AddLooseGameplayTagEX(PlayerController, TAG_Gameplay_Invincible, false, false);
 		}
 	}
 	
@@ -108,16 +134,19 @@ void ADeathBringerGameMode::PrepareGame(const bool bHardReset)
 		TransientActors.Empty();
 	}
 	
-	FTimerHandle Handle;
-	GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([this]()
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([this]()
 	{
 		StartGame();
 	}
 	), GameSettings.StartGameWaitTime, false);
+	
+	UE_LOG(LogTemp, Display, TEXT("Done Preparing game"))
 }
 
 void ADeathBringerGameMode::StartGame()
 {
+	UE_LOG(LogTemp, Display, TEXT("Starting game"))
+	
 	Super::StartGame();
 	DeathBringers.Empty();
 	
@@ -168,7 +197,7 @@ void ADeathBringerGameMode::StartGame()
 	
 	for (int i = 0; i < AlivePlayers.Num(); ++i)
 	{
-		const APawn* Player = AlivePlayers[i];
+		APawn* Player = AlivePlayers[i];
 		if (!Player) continue;
 		
 		ABoxelPlayerState* PlayerState = Player->GetPlayerState<ABoxelPlayerState>();
@@ -186,13 +215,40 @@ void ADeathBringerGameMode::StartGame()
 			PlayerState->RegisterVoiceChannel(TeamId);
 		}
 		
-		if (UAbilitySystemComponent* AbilityComp = PlayerState->GetAbilitySystemComponent())
+		UMAUtils::RemoveLooseGameplayTagEX(PlayerState, TAG_Gameplay_Invincible, false);
+		UMAUtils::RemoveLooseGameplayTagEX(PlayerState, TAG_DeathBringer_Guilty, true);
+		
+		bool bIsGuilty = false;
+		AController* Controller = Player->GetController();
+		if (TeamKillers.Contains(Controller))
 		{
-			AbilityComp->RemoveLooseGameplayTag(TAG_Gameplay_Invincible);
+			const int TeamKillCount = TeamKillers[Controller];
+			bIsGuilty = true;
+			
+			UMAUtils::AddLooseGameplayTagEX(Controller, TAG_DeathBringer_Guilty, true , true, TeamKillCount);
+			TeamKillers.Remove(Controller);
+			
+			if (ABoxelPlayerCharacter* Character = Cast<ABoxelPlayerCharacter>(Player))
+			{
+				TArray<uint8> Payload;
+				Payload.Add(UMAUtils::GetLooseGameplayTagCountEX(Controller, TAG_DeathBringer_Guilty));
+				Character->Client_SendGenericMessage(EGenericPlayerMessage::Guilty, Payload);
+			}
+		}
+		else if (UMAUtils::HasLooseGameplayTagEX(Controller, TAG_DeathBringer_Guilty))
+		{
+			bIsGuilty = true;
+			
+			if (ABoxelPlayerCharacter* Character = Cast<ABoxelPlayerCharacter>(Player))
+			{
+				TArray<uint8> Payload;
+				Payload.Add(UMAUtils::GetLooseGameplayTagCountEX(Controller, TAG_DeathBringer_Guilty));
+				Character->Client_SendGenericMessage(EGenericPlayerMessage::Guilty, Payload);
+			}
 		}
 		
-		//Not normal player get sum money to spend, yippee!!
-		if (TeamId != EDeathBringerTeam::Normal)
+		//Special roles get sum money to spend, yippee!!
+		if (TeamId != EDeathBringerTeam::Normal && !bIsGuilty)
 		{
 			UInventoryComponent* Inventory;
 			if (UMobiusUtils::GetInventory(PlayerState, Inventory))
@@ -225,9 +281,13 @@ void ADeathBringerGameMode::StartGame()
 		}
 	}
 	
+	TeamKillers.Empty();
+	
 	SetRoundState(EDeathBringerRoundState::Active);
 	GameTimer = GameSettings.GameLengthMinutes * 60.0f;
 	GetGameState<ADeathBringerGameState>()->SetRoundEndTime(GameTimer);
+	
+	UE_LOG(LogTemp, Display, TEXT("Finished Starting game"))
 }
 
 void ADeathBringerGameMode::EndDeathBringerGame_Implementation(const bool bDeathBringerWin)
@@ -252,19 +312,18 @@ void ADeathBringerGameMode::EndDeathBringerGame_Implementation(const bool bDeath
 		}
 	}
 	
-	FTimerHandle Handle;
-	GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([this]()
+	GetWorld()->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([this]()
 	{
 		PrepareGame(true);
 	}
 	), GameSettings.EndGameWaitTime, false);
 }
 
-void ADeathBringerGameMode::KillPlayer(APawn* Player)
+void ADeathBringerGameMode::KillPlayer(APawn* Player, const AController* KilledBy)
 {
 	if (!Player) return;
 
-	Super::KillPlayer(Player);
+	Super::KillPlayer(Player, KilledBy);
 	
 	if (DeathBringers.Contains(Player))
 	{
@@ -275,6 +334,15 @@ void ADeathBringerGameMode::KillPlayer(APawn* Player)
 	
 	PawnController->ChangeState(NAME_Spectating);
 	PawnController->ClientGotoState(NAME_Spectating);
+	
+	if (GetRoundState() == EDeathBringerRoundState::Active)
+	{
+		if (UMobiusUtils::GetTeamAttitude(UMobiusUtils::GetTeamId(KilledBy),  UMobiusUtils::GetTeamId(PawnController)) == ETeamAttitude::Friendly)
+		{
+			int& KillCount = TeamKillers.FindOrAdd(KilledBy);
+			KillCount++;
+		}
+	}
 	
 	if (AlivePlayers.Num() == DeathBringers.Num())
 	{
@@ -305,9 +373,9 @@ const FDeathBringerGameModeSettings& ADeathBringerGameMode::GetGameModeSettings(
 {
 #if !WITH_EDITOR
 	return ShippingGameModeSettings;
-#endif
-	
+#else
 	return bUseDebugSettings ? DebugGameModeSettings : ShippingGameModeSettings;
+#endif
 }
 
 bool ADeathBringerGameMode::CanBeDeathBringer(const APlayerController* Controller) const
@@ -328,17 +396,11 @@ void ADeathBringerGameMode::OnPlayerLogin(AGameModeBase* GameMode, APlayerContro
 		PrepareGame(false);
 	}
 	
-	if (UAbilitySystemComponent* AbilityComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(PC))
-	{
-		if (!AbilityComp->HasMatchingGameplayTag(TAG_Gameplay_Invincible))
-		{
-			AbilityComp->AddLooseGameplayTag(TAG_Gameplay_Invincible);
-		}
-	}
+	UMAUtils::AddLooseGameplayTagEX(PC, TAG_Gameplay_Invincible, false, false);
 }
 
 void ADeathBringerGameMode::OnPlayerLogout(AGameModeBase* GameMode, AController* PC)
 {
 	Super::OnPlayerLogout(GameMode, PC);
-	KillPlayer(PC->GetPawn());
+	KillPlayer(PC->GetPawn(), nullptr);
 }

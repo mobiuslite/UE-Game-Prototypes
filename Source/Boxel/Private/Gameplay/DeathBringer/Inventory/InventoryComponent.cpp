@@ -102,27 +102,35 @@ void UInventoryComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void UInventoryComponent::ClearInventory()
 {
-	while (Items.Num() != 0)
+	UE_LOG(LogTemp, Display, TEXT("Clearing Inventory"))
+
+	for (int i = 0; i < Items.Num(); ++i)
 	{
-		RemoveItem(Items[0]);
+		RemoveItem(Items[i], false);
 	}
 	
+	Items.Empty();
+	
+	const TArray<FResourceData> OldResources = Resources;
 	Resources.Empty();
+	OnRep_Resources(OldResources);
 	
 	if (ABoxelPlayerState* PlayerState = Cast<ABoxelPlayerState>(GetOwner()))
 	{
 		PlayerState->BroadcastGunUnequipped(nullptr);
 	}
+	
+	UE_LOG(LogTemp, Display, TEXT("Done clearing Inventory"))
 }
 
-void UInventoryComponent::RemoveItem(AInventoryItem* Item)
+void UInventoryComponent::RemoveItem(AInventoryItem* Item, const bool bAutoRemoveFromList)
 {
 	AController* OwnerController = GetOwnerController();
 	if (!OwnerController)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Inventory Component controller is null!"))
 	}
-	
+
 	if (!IsValid(Item)) return;
 	
 	//If player is holding this item, set them to be unarmed
@@ -134,7 +142,7 @@ void UInventoryComponent::RemoveItem(AInventoryItem* Item)
 		}
 	}
 	
-	Items.Remove(Item);
+	if (bAutoRemoveFromList) Items.Remove(Item);
 	Item->OnRemovedFromInventory(this, OwnerController);
 }
 
@@ -270,6 +278,16 @@ int UInventoryComponent::GetIndexOfItem(const AInventoryItem* Item) const
 	if (!IsValid(Item)) return INDEX_NONE;
 	
 	return Items.IndexOfByKey(Item);
+}
+
+TArray<FString> UInventoryComponent::GetItemNames() const
+{
+	TArray<FString> Results;
+	for (int i = 0; i < Items.Num(); ++i)
+	{
+		Results.Add(Items[i]->GetName());
+	}
+	return Results;
 }
 
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const

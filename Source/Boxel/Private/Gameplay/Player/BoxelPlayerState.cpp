@@ -63,7 +63,7 @@ void ABoxelPlayerState::UnregisterUncommonVoiceChannels()
 	}
 }
 
-bool ABoxelPlayerState::IsRegisteredToVoiceChannel(const uint8 ChannelID)
+bool ABoxelPlayerState::IsRegisteredToVoiceChannel(const uint8 ChannelID) const
 {
 	return RegisteredVoiceChannels.Contains(ChannelID);
 }
@@ -128,7 +128,8 @@ void ABoxelPlayerState::BeginPlay()
 	
 	if (AMobiusGameState* GameState = GetWorld()->GetGameState<AMobiusGameState>())
 	{
-		GameState->OnRoundHardResetDelegate.AddDynamic(this, &ThisClass::OnRoundReset);
+		//Preround so we know all guns are properly removed from players before resetting their position on the map
+		GameState->PreRoundHardResetDelegate.AddDynamic(this, &ThisClass::OnRoundReset);
 	}
 	
 	//Proximity voice channel
@@ -189,7 +190,6 @@ void ABoxelPlayerState::OnRoundReset()
 		if (UMobiusAbilitySystemComponent* AbilityComp = Cast<UMobiusAbilitySystemComponent>(GetAbilitySystemComponent()))
 		{
 			AbilityComp->ResetAttributes();
-			AbilityComp->ClearAllAbilities();
 		}
 	}
 }

@@ -23,5 +23,12 @@ public:
 	float FOV;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	float MasterVolume;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	float SFXVolume;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	float VCVolume;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	bool bCameraMotion;
 };

@@ -42,6 +42,60 @@ void UBoxelSaveSubsystem::SetMouseSensitivity(const float& Value)
 	GetGameSave()->MouseSensitivity = Value;
 }
 
+float UBoxelSaveSubsystem::GetVolume(const TEnumAsByte<EVolume::Type> Type)
+{
+	float Result = 0.0f;
+	
+	switch (Type) 
+	{
+	case EVolume::Master:
+		{
+			Result = GetGameSave()->MasterVolume;
+		}
+		break;
+	case EVolume::Sfx:
+		{
+			Result = GetGameSave()->SFXVolume;
+		}
+		break;
+	case EVolume::Vc:
+		{
+			Result = GetGameSave()->VCVolume;
+		}
+		break;
+	default: ;
+	}
+	
+	return Result;
+}
+
+void UBoxelSaveSubsystem::SetVolume(const TEnumAsByte<EVolume::Type> Type, const float& Volume)
+{
+	switch (Type) 
+	{
+	case EVolume::Master:
+		{
+			GetGameSave()->MasterVolume = Volume;
+		}
+		break;
+	case EVolume::Sfx:
+		{
+			GetGameSave()->SFXVolume = Volume;
+		}
+		break;
+	case EVolume::Vc:
+		{
+			GetGameSave()->VCVolume = Volume;
+		}
+		break;
+	default:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Setting Volume failed, wrong type given: %d"), Type.GetValue())
+		}
+		break;
+	}
+}
+
 float UBoxelSaveSubsystem::GetFOV()
 {
 	return GetGameSave()->FOV;

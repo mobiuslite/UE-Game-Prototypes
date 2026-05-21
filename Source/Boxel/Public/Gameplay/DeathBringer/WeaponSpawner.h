@@ -13,6 +13,12 @@ struct FWeaponSpawnData
 {
 	GENERATED_BODY()
 	
+	FWeaponSpawnData()
+	{
+		Actor = nullptr;
+		bIsRespawnable = false;
+	}
+	
 	UPROPERTY()
 	AActor* Actor;
 	

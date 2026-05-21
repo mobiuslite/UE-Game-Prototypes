@@ -3,10 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
 #include "GameFramework/Actor.h"
-#include "Gameplay/Interfaces/InventoryItem.h"
+#include "Gameplay/DeathBringer/Inventory/DroppableInventoryItem.h"
 #include "GunBase.generated.h"
 
 class UToastWidget;
@@ -17,7 +16,7 @@ class UGunGameplayAbility;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChangedSignature, int, CurrentAmmo, int, MaxAmmo);
 
 UCLASS()
-class BOXEL_API AGunBase : public AInventoryItem
+class BOXEL_API AGunBase : public ADroppableInventoryItem
 {
 	GENERATED_BODY()
 
@@ -25,16 +24,21 @@ public:
 	AGunBase();
 	virtual void Tick(float DeltaSeconds) override;
 	
+	virtual void OnEquip_Implementation(AController* HolderController) override;
 	virtual void OnUnequip_Implementation(AController* HolderController) override;
-	virtual void OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController) override;
-	
+
 	int GetAmmoCount () const { return CurrentClipAmmo; }
+	float GetDamageAmount(const float Distance = 0) const;
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool CanUseGun() const;
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool IsLocallyHeldGun() const;
 	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	bool HasScope() const { return bHasScope; }
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	float GetEquipTime() const { return EquipTime; }
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	float GetFireRate() const;
 	UFUNCTION(BlueprintCallable, BlueprintPure)
@@ -69,29 +73,28 @@ public:
 protected:
 	
 	virtual void OnRep_Holder() override;
-	virtual void OnHolderHistoryRemoved() override;
-	virtual void OnHolderHistoryAdded() override;
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	UStaticMeshComponent* GunMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	USceneComponent* MuzzleLocation;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gun|Animation")
 	TObjectPtr<UAnimMontage> FireMontage;
 	
-	//TODO: Using RPM like this would allow clients to set their own RPM and make damage cheats through it
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Stats")
 	float RPM = 400.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Stats")
+	float EquipTime = 0.75f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Stats")
 	bool bFullyAutomatic;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Gun|Stats", meta=(Units="Seconds"))
 	float ReloadDuration = 1.75f;
 	
-	UPROPERTY(EditDefaultsOnly, Category="Gun|Throwing")
-	float DropImpulseStrength = 240.0f;
-	UPROPERTY(EditDefaultsOnly, Category="Gun|Throwing")
-	float DropThrowOffset = 50.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Damage")
+	float BaseDamageAmount = 20.0f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Damage")
+	class UCurveFloat* DamageFalloff;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Damage")
+	float GuiltyDamageMultiplier = 0.7f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Gun|Aiming")
 	bool bHasScope;
@@ -113,10 +116,15 @@ protected:
 	float SpreadPerBullet = 2.0f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy")
 	float MovementSpreadMultiplier = 5.5f;
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy")
+	float MovementSpreadEaseExp = 1.66;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy", meta=(Units="Degrees"))
 	float MaxBulletSpread = 10.0f;
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy", meta=(Units="DegreesPerSecond"))
 	float SpreadReductionPerSecond = 15.0f;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Gun|Accuracy", meta=(Units="Degrees"))
+	float GuiltyAdditiveSpreadAmount = 3.0f;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Gun|Recoil", meta=(Units="Degrees"))
 	float RecoilPerBullet = 0.5f;
@@ -146,7 +154,9 @@ protected:
 	UPROPERTY(BlueprintAssignable)
 	FOnAmmoChangedSignature OnAmmoChangedDelegate;
 	
-	virtual void SetPhysicsEnabled(const bool bEnabled) override;
-	
 	virtual void BeginPlay() override;
+	
+private:
+	
+	float EquipReadyWorldTime;
 };

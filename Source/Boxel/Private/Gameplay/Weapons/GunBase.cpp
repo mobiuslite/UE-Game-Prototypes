@@ -6,24 +6,26 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Net/UnrealNetwork.h"
-#include "Utility/CollisionConsts.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "Gameplay/DeathBringer/Inventory/InventoryComponent.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
+#include "MobiusAbilitySystem/Utils/MAGameplayTags.h"
+#include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
 
 AGunBase::AGunBase()
 {
-	GunMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Gun Mesh"));
-	SetRootComponent(GunMesh);
-	
-	GunMesh->SetCollisionObjectType(ECC_Gun);
-	GunMesh->SetSimulatePhysics(true);
-	
 	MuzzleLocation = CreateDefaultSubobject<USceneComponent>(TEXT("Muzzle Location"));
-	MuzzleLocation->SetupAttachment(GunMesh);
+	
+	UStaticMeshComponent* Mesh = GetItemMesh();
+	ensure(Mesh != nullptr);
+	
+	MuzzleLocation->SetupAttachment(Mesh);
 }
 
 float AGunBase::GetFireRate() const
@@ -41,7 +43,10 @@ bool AGunBase::GetGunZoomAmount(float& ZoomAmount) const
 
 void AGunBase::ApplySpread()
 {
-	BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount + SpreadPerBullet, 0.0f, MaxBulletSpread);
+	const bool bIsGuilty = UMAUtils::HasLooseGameplayTagEX(GetHolder(), TAG_DeathBringer_Guilty);
+	const float MaxSpread = bIsGuilty ? MaxBulletSpread + GuiltyAdditiveSpreadAmount : MaxBulletSpread;
+	
+	BulletSpreadAmount = FMath::Clamp(BulletSpreadAmount + SpreadPerBullet, 0.0f, MaxSpread);
 	
 	if (ABoxelPlayerCharacter* Player = Cast<ABoxelPlayerCharacter>(GetHolder()))
 	{
@@ -62,9 +67,26 @@ float AGunBase::GetTotalBulletSpread() const
 	float Result = BulletSpreadAmount + (bIsAiming && bHasScope ? AimingMinSpreadAmount : MinSpreadAmount);
 	if (Holder)
 	{
-		if (const UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(Holder->GetMovementComponent()))
+		const UCharacterMovementComponent* MovementComp = Cast<UCharacterMovementComponent>(Holder->GetMovementComponent());
+		const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Holder);
+		
+		if (MovementComp && ASC)
 		{
-			Result += (MovementComp->IsFalling() ? MovementComp->GetMaxSpeed() : MovementComp->Velocity.Length()) * (MovementSpreadMultiplier * 0.01f);
+			const float MaxSpread = ASC->GetNumericAttributeBase(UMACommonAttributeSet::GetMoveSpeedAttribute()) * 0.01f;
+			float CurrentSpread = MaxSpread;
+			
+			if (!MovementComp->IsFalling())
+			{
+				const float Alpha = FMath::Clamp(MovementComp->Velocity.Length() * 0.01f / MaxSpread, 0.0f, 1.0f);
+				CurrentSpread = UKismetMathLibrary::Ease(0.0f, MaxSpread, Alpha, EEasingFunc::EaseIn, MovementSpreadEaseExp);
+			}
+			
+			Result += CurrentSpread * MovementSpreadMultiplier;
+		}
+		
+		if (UMAUtils::HasLooseGameplayTagEX(Holder, TAG_DeathBringer_Guilty))
+		{
+			Result += GuiltyAdditiveSpreadAmount;
 		}
 	}
 	
@@ -113,6 +135,12 @@ void AGunBase::ResetGun()
 {
 	CurrentClipAmmo = AmmoPerClip;
 	ReloadTimer = 0.0f;
+	
+	if (GetItemMesh())
+	{
+		GetItemMesh()->SetPhysicsLinearVelocity(FVector(0.0f));
+		GetItemMesh()->SetPhysicsAngularVelocityInDegrees(FVector(0.0f));
+	}
 }
 
 void AGunBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -127,16 +155,6 @@ void AGunBase::OnRep_Holder()
 	Super::OnRep_Holder();
 	
 	CancelReloading();
-}
-
-void AGunBase::OnHolderHistoryRemoved()
-{
-	GunMesh->ClearMoveIgnoreActors();
-}
-
-void AGunBase::OnHolderHistoryAdded()
-{
-	GunMesh->IgnoreActorWhenMoving(GetHolder(), true);
 }
 
 void AGunBase::BeginPlay()
@@ -199,12 +217,6 @@ void AGunBase::Server_RequestReload_Implementation()
 	ReloadTimer = ReloadDuration;
 }
 
-void AGunBase::SetPhysicsEnabled(const bool bEnabled)
-{
-	Super::SetPhysicsEnabled(bEnabled);
-	GunMesh->SetSimulatePhysics(bEnabled);
-}
-
 // Called every frame
 void AGunBase::Tick(float DeltaSeconds)
 {
@@ -225,6 +237,14 @@ void AGunBase::Tick(float DeltaSeconds)
 	}
 }
 
+void AGunBase::OnEquip_Implementation(AController* HolderController)
+{
+	Super::OnEquip_Implementation(HolderController);
+	
+	const float ServerWorldTime = GetWorld()->GetGameState()->GetServerWorldTimeSeconds();
+	EquipReadyWorldTime = ServerWorldTime + EquipTime;
+}
+
 void AGunBase::OnUnequip_Implementation(AController* HolderController)
 {
 	Super::OnUnequip_Implementation(HolderController);
@@ -232,23 +252,24 @@ void AGunBase::OnUnequip_Implementation(AController* HolderController)
 	CancelReloading();
 }
 
-void AGunBase::OnRemovedFromInventory_Implementation(const UInventoryComponent* Inventory, AController* HolderController)
+float AGunBase::GetDamageAmount(const float Distance) const
 {
-	UE_LOG(LogTemp, Display, TEXT("Removing holder from gun"));
+	if (!DamageFalloff) return  BaseDamageAmount;
 	
-	APawn* HolderPawn = HolderController->GetPawn();
-	
-	Super::OnRemovedFromInventory_Implementation(Inventory, HolderController);
-	
-	//TODO: Don't throw on killed death
-	if (HolderPawn)
+	float DamageMultiplier = DamageFalloff->GetFloatValue(Distance);
+	if (UMAUtils::HasLooseGameplayTagEX(GetHolder(), TAG_DeathBringer_Guilty))
 	{
-		GunMesh->AddImpulse(HolderPawn->GetBaseAimRotation().Vector() * DropImpulseStrength, NAME_None, true);
+		DamageMultiplier *= GuiltyDamageMultiplier;
 	}
+	
+	return BaseDamageAmount * DamageMultiplier;
 }
 
 bool AGunBase::CanUseGun() const
 {
+	const float ServerWorldTime = GetWorld()->GetGameState()->GetServerWorldTimeSeconds();
+	if (EquipReadyWorldTime > ServerWorldTime) return false;
+	
 	return ReloadTimer <= 0.0f && CurrentClipAmmo > 0;
 }
 

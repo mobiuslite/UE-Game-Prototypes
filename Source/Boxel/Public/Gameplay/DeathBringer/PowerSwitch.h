@@ -45,4 +45,6 @@ protected:
 	
 	UFUNCTION()
 	void OnRoundReset();
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_OnRoundReset();
 };

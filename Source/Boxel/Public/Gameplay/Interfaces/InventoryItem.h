@@ -31,6 +31,12 @@ struct FHolderHistoryData
 {
 	GENERATED_BODY()
 	
+	FHolderHistoryData()
+	{
+		HeldCooldownTimer = 0.0f;
+		PreviousHolder = nullptr;
+	}
+	
 	UPROPERTY()
 	const APawn* PreviousHolder;
 	UPROPERTY()
@@ -60,7 +66,9 @@ public:
 	void OnRemovedFromInventory(const UInventoryComponent* Inventory, AController* HolderController);
 	
 	virtual bool CanBePickedUp(const APawn* PawnHolder) const;
+	
 	virtual bool CanBeDropped() const { return bCanBeDropped; }
+	void SetCanBeDropped(const bool bDroppable) { bCanBeDropped = bDroppable; }
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	bool IsHeldInHand() const { return bVisible; }
@@ -82,7 +90,7 @@ protected:
 	TSubclassOf<UGameplayAbility> EquippedGrantedAbilityClass;
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UGameplayEffect> EquippedGrantedEffectClass;
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(EditDefaultsOnly, Replicated)
 	bool bCanBeDropped = true;
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UAnimInstance> HeldABP;

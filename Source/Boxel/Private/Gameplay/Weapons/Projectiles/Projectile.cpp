@@ -49,6 +49,8 @@ void AProjectile::AUTH_ProjectileStop_Implementation(const FHitResult& ImpactRes
 
 bool AProjectile::IsClientPredictedProjectile() const
 {
+	if (!GetInstigator()) return false;
+	
 	const bool bHasAuthority = HasAuthority();
 	const ENetRole ThisRole = GetInstigator()->GetLocalRole();
 	

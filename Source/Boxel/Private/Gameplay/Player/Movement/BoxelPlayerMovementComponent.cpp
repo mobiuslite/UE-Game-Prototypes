@@ -3,12 +3,19 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Character.h"
+#include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 
 UBoxelPlayerMovementComponent::UBoxelPlayerMovementComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	bUseFlatBaseForFloorChecks = true;
+}
+
+bool UBoxelPlayerMovementComponent::IsAiming() const
+{
+	//TODO: Properly implement an aiming movement mode using the custom saved moves n stuff
+	return false;
 }
 
 void UBoxelPlayerMovementComponent::BeginPlay()
@@ -29,9 +36,19 @@ float UBoxelPlayerMovementComponent::GetMaxSpeed() const
 	{
 	case MOVE_Walking:
 	case MOVE_NavWalking:
-		if (bFoundMoveSpeed) return MoveSpeed;
+		{
+			float MovePenalty = 1.0f;
+			if (IsCrouching())
+			{
+				MovePenalty = FMath::Min(MovePenalty, CrouchMovePenaltyMultiplier);
+			}
+			if (IsAiming())
+			{
+				MovePenalty = FMath::Min(MovePenalty, AimMovePenaltyMultiplier);
+			}
 		
-		return IsCrouching() ? MaxWalkSpeedCrouched : MaxWalkSpeed;
+			return MoveSpeed * MovePenalty;
+		}
 	case MOVE_Falling:
 		if (bFoundMoveSpeed) return MoveSpeed;
 		

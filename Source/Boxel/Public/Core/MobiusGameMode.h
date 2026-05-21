@@ -19,7 +19,7 @@ public:
 	virtual void StartGame();
 	
 	UFUNCTION(BlueprintCallable)
-	virtual void KillPlayer(APawn* Player);
+	virtual void KillPlayer(APawn* Player, const AController* KilledBy);
 	
 	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
 	FOnPlayerDiedSignature OnPlayerDiedDelegate;

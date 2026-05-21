@@ -17,7 +17,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	
 	virtual void StartGame() override;
-	virtual void KillPlayer(APawn* Player) override;
+	virtual void KillPlayer(APawn* Player, const AController* KilledBy) override;
 	
 protected:
 	

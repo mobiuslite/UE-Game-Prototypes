@@ -27,7 +27,7 @@ void AMobiusGameMode::StartGame()
 	AlivePlayers.Append(PlayerActors);
 }
 
-void AMobiusGameMode::KillPlayer(APawn* Player)
+void AMobiusGameMode::KillPlayer(APawn* Player, const AController* KilledBy)
 {
 	AlivePlayers.Remove(Player);
 	OnPlayerDiedDelegate.Broadcast(Player->GetController());

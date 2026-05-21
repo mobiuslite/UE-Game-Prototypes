@@ -17,6 +17,7 @@
 #include "Gameplay/Interfaces/InventoryItem.h"
 #include "Gameplay/Player/BoxelPlayerCharacter.h"
 #include "MobiusAbilitySystem/Utils/MAUtils.h"
+#include "Utility/BoxelCheatManager.h"
 #include "Utility/MobiusGameplayTags.h"
 #include "Utility/MobiusUtils.h"
 
@@ -96,6 +97,11 @@ void ABoxelPlayerController::LeaveLobbyArena_Implementation()
 		
 		GameMode->RemovePlayerFromArena(this);
 	}
+}
+
+ABoxelPlayerController::ABoxelPlayerController(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
+{
+	CheatClass = UBoxelCheatManager::StaticClass();
 }
 
 void ABoxelPlayerController::BeginPlay()

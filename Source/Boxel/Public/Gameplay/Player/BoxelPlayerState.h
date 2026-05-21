@@ -34,7 +34,8 @@ public:
 	//Unregisters from all voice channels except 0 & 1 (Proximity and global radio)
 	void UnregisterUncommonVoiceChannels();
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	bool IsRegisteredToVoiceChannel(const uint8 ChannelID);
+	bool IsRegisteredToVoiceChannel(const uint8 ChannelID) const;
+	TArray<uint8> GetRegisteredVoiceChannels() const { return RegisteredVoiceChannels; }
 	
 	UFUNCTION(BlueprintCallable)
 	void AUTH_SetTeamId(const FGenericTeamId& NewTeamID);

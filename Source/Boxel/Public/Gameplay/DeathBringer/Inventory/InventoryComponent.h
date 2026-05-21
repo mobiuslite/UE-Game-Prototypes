@@ -17,6 +17,11 @@ struct FResourceData : public  FFastArraySerializerItem
 {
 	GENERATED_BODY()
 	
+	FResourceData()
+	{
+		ResourceCount = 0;
+	}
+	
 	UPROPERTY()
 	FGameplayTag ResourceTag;
 	
@@ -26,7 +31,19 @@ struct FResourceData : public  FFastArraySerializerItem
 	void PreReplicatedRemove(const struct FResources& InArraySerializer) {}
 	void PostReplicatedAdd(const struct FResources& InArraySerializer) {}
 	void PostReplicatedChange(const struct FResources& InArraySerializer) {}
+	
+	void Serialize(FArchive& Ar)
+	{
+		Ar << ResourceTag;
+		Ar << ResourceCount;
+	}
 };
+
+FORCEINLINE FArchive& operator<<(FArchive& Ar, FResourceData& ResourceData)
+{
+	ResourceData.Serialize(Ar);
+	return Ar;
+}
 
 USTRUCT()
 struct FResources : public FFastArraySerializer
@@ -78,7 +95,7 @@ public:
 	void ClearInventory();
 	
 	UFUNCTION(BlueprintCallable)
-	void RemoveItem(AInventoryItem* Item);
+	void RemoveItem(AInventoryItem* Item, const bool bAutoRemoveFromList = true);
 	UFUNCTION(BlueprintCallable)
 	bool AddItem(AInventoryItem* Item);
 	
@@ -95,6 +112,10 @@ public:
 	AInventoryItem* GetItemByIndex(const int Index) const;
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	int GetIndexOfItem(const AInventoryItem* Item) const;
+	
+	//Only used for debugging, you should
+	TArray<FResourceData> GetResources() const { return Resources; }
+	TArray<FString> GetItemNames() const;
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	

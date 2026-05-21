@@ -67,16 +67,16 @@ public:
 	ADeathBringerGameMode();
 	
 	virtual void Tick(float DeltaSeconds) override;
+	virtual AActor* FindPlayerStart_Implementation(AController* Player, const FString& IncomingName = L"") override;
 	
 	//Hard reset will delete all bodies, reset all guns, and reset all players
 	void PrepareGame(const bool bHardReset);
-	
 	virtual void StartGame() override;
 	
 	UFUNCTION(BlueprintNativeEvent)
 	void EndDeathBringerGame(const bool bDeathBringerWin);
 	
-	virtual void KillPlayer(APawn* Player) override;
+	virtual void KillPlayer(APawn* Player, const AController* KilledBy) override;
 	
 	//Actors added will get destroyed upon round restart
 	void AddTransientActor(AActor* Actor);
@@ -91,6 +91,7 @@ public:
 protected:
 	
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	void SetRoundState(const EDeathBringerRoundState::Type RoundState);
 	EDeathBringerRoundState::Type GetRoundState() const;
@@ -105,6 +106,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (EditCondition = "bUseDebugSettings"))
 	FDeathBringerGameModeSettings DebugGameModeSettings;
 	
+	FTimerHandle TimerHandle;
+	
 	float GameTimer;
 	
 	bool CanBeDeathBringer(const APlayerController* Controller) const;
@@ -118,5 +121,10 @@ protected:
 	
 	virtual void OnPlayerLogin(AGameModeBase* GameMode, APlayerController* PC) override;
 	virtual void OnPlayerLogout(AGameModeBase* GameMode, AController* PC) override;
+	
+private:
+	
+	UPROPERTY()
+	TMap<const AController*, int> TeamKillers;
 };
 

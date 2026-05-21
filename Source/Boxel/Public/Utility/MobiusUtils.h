@@ -62,6 +62,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	static void TickDownFloat(UPARAM(ref) float& Timer, const float DeltaTime, bool& bDone);
+	UFUNCTION(BlueprintCallable)
+	static void TickUpFloat(UPARAM(ref) float& Timer, const float DeltaTime, const float Duration, bool& bDone);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(Keywords="seconds, time, float"))
 	static FString FloatToMinutesSeconds(float Seconds);
@@ -164,4 +166,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
 	static void ServerTravel(const UObject* WorldContextObject, const FString& InURL, bool bAbsolute = false, bool bShouldSkipGameNotify = false);
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"))
+	static void Browse(const UObject* WorldContextObject, const FString& InURL, FString& ErrorString);
 };

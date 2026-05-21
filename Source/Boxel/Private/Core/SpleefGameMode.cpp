@@ -90,9 +90,9 @@ void ASpleefGameMode::StartGame()
 	ApplyRandomModifiers(AlivePlayers);
 }
 
-void ASpleefGameMode::KillPlayer(APawn* Player)
+void ASpleefGameMode::KillPlayer(APawn* Player, const AController* KilledBy)
 {
-	Super::KillPlayer(Player);
+	Super::KillPlayer(Player, KilledBy);
 	
 	if (AlivePlayers.Num() == 1)
 	{

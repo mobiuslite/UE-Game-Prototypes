@@ -96,7 +96,10 @@ void UHitscanGameplayAbility::OnRangedWeaponTargetDataReady(const FGameplayAbili
 		const TSubclassOf<UGameplayEffect> DamageClass = Gun->GetDamageEffectClass();
 		if (IsValid(DamageClass) && HasAuthority(&CurrentActivationInfo))
 		{
-			FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass, HitResult, Gun);
+			const float TraceDistance = HitResult.Distance;
+			const float DamageAmount = Gun->GetDamageAmount(TraceDistance);
+			
+			FGameplayEffectSpecHandle Handle = UMAUtils::MakeHitDamageSpec(GetAbilitySystemComponentFromActorInfo(), this, DamageClass, DamageAmount, HitResult, Gun);
 			K2_ApplyGameplayEffectSpecToTarget(Handle, TargetData);
 		}
 	}

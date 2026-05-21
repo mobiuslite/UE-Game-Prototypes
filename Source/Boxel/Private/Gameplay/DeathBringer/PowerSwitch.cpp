@@ -51,6 +51,7 @@ void APowerSwitch::BeginPlay()
 void APowerSwitch::OnRoundReset()
 {
 	SetPowered(false);
+	BP_OnRoundReset();
 }
 
 void APowerSwitch::OnRep_Powered_Implementation()

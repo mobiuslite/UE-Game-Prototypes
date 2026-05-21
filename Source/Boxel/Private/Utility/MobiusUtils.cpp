@@ -69,6 +69,16 @@ void UMobiusUtils::TickDownFloat(float& Timer, const float DeltaTime, bool& bDon
 	}
 }
 
+void UMobiusUtils::TickUpFloat(float& Timer, const float DeltaTime, const float Duration, bool& bDone)
+{
+	bDone = false;
+	Timer += DeltaTime;
+	if (Timer >= Duration)
+	{
+		bDone = true;
+	}
+}
+
 FString UMobiusUtils::FloatToMinutesSeconds(float Seconds)
 {
 	const TCHAR* NegativeModifier = Seconds < 0.f? TEXT("-") : TEXT("");
@@ -150,4 +160,16 @@ void UMobiusUtils::ServerTravel(const UObject* WorldContextObject, const FString
 	if (!WorldContextObject || !WorldContextObject->GetWorld()) return;
 	
 	WorldContextObject->GetWorld()->ServerTravel(InURL, bAbsolute, bShouldSkipGameNotify);
+}
+
+void UMobiusUtils::Browse(const UObject* WorldContextObject, const FString& InURL, FString& ErrorString)
+{
+	if (!WorldContextObject || !WorldContextObject->GetWorld() || !WorldContextObject->GetWorld()->GetGameInstance())
+	{
+		ErrorString = "World parameter null!";
+		return;
+	}
+	
+	const FURL LocalURL(nullptr, *InURL, TRAVEL_Absolute);
+	GEngine->Browse(*WorldContextObject->GetWorld()->GetGameInstance()->GetWorldContext(), LocalURL, ErrorString);
 }

@@ -21,4 +21,6 @@ public:
 	//Game modes need to implement this manually. Not automatically called
 	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
 	FOnRoundHardResetSignature OnRoundHardResetDelegate;
+	UPROPERTY(BlueprintAssignable, BlueprintReadWrite)
+	FOnRoundHardResetSignature PreRoundHardResetDelegate;
 };

@@ -8,6 +8,23 @@
 
 class UBoxelSaveGame;
 
+UENUM(BlueprintType)
+namespace EVolume
+{
+	
+	enum Type : uint8
+	{
+		None,
+	
+		Master,
+		Sfx,
+		Vc,
+	
+		COUNT
+	};
+}
+
+
 UCLASS()
 class BOXEL_API UBoxelSaveSubsystem : public UGameInstanceSubsystem
 {
@@ -27,6 +44,11 @@ public:
 	float GetMouseSensitivity();
 	UFUNCTION(BlueprintCallable)
 	void SetMouseSensitivity(const float& Value);
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	float GetVolume(const TEnumAsByte<EVolume::Type> Type);
+	UFUNCTION(BlueprintCallable)
+	void SetVolume(const TEnumAsByte<EVolume::Type> Type, const float& Volume);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	float GetFOV();
