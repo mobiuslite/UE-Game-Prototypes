@@ -20,18 +20,21 @@ class MOBIUSABILITYCOMPONENT_API UMAUtils : public UBlueprintFunctionLibrary
 public:
 	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability")
 	static FGameplayEffectSpecHandle MakeHitDamageSpec(UAbilitySystemComponent* AbilityComponent,
-		UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FHitResult& HitResult, AActor* Causer);
+		UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const float DamageAmount, const FHitResult& HitResult, AActor* Causer);
 	
 	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability")
 	static FGameplayEffectSpecHandle MakeSpecSetByCaller(const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FGameplayTag& Tag, const float Value);
 	
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
-	static bool HasLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag);
+	static bool HasLooseGameplayTagEX(const AActor* Actor, const FGameplayTag& GameplayTag);
+	
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
+	static int GetLooseGameplayTagCountEX(const AActor* Actor, const FGameplayTag& GameplayTag);
 	
 	//Returns true if successful in adding or removing. Returns false if failed for any reason, including tag not existing to remove
 	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
-	static bool AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bAllowStacks, bool bShouldReplicate);
+	static bool AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bAllowStacks, bool bShouldReplicate, int Count = 1);
 	UFUNCTION(BlueprintCallable, Category="MAUtils|Ability", meta=(DefaultToSelf = "Actor"))
 	static bool RemoveLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bShouldReplicate);
 	

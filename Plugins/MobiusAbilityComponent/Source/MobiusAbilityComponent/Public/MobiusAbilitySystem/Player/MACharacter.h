@@ -20,7 +20,10 @@ public:
 	//Tells the client they took damage. If you want numbers, subscribe to the health attribute on the pawn's Ability System Component
 	UFUNCTION(Client, Reliable)
 	virtual void Client_OnDamageTaken(const AController* DamageInstigator, const AActor* DamageCauser, const bool bIsDead);
-	virtual void Server_OnPlayerDead(const FHitResult& Hit, const AActor* Causer) {};
+	UFUNCTION(Client, Reliable)
+	virtual void Client_KilledPlayer(const APlayerState* KilledPlayerState);
+	
+	virtual void Server_OnPlayerDead(const FHitResult& Hit, const AController* DamageInstigator, const AActor* DamageCauser);
 	
 protected:
 	virtual void BeginPlay() override;

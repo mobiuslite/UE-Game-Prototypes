@@ -6,17 +6,12 @@
 #include "MobiusAbilitySystem/Attributes/MACommonAttributeSet.h"
 #include "GameFramework/PlayerState.h"
 #include "MobiusAbilitySystem/MAGameplayAbility.h"
-
-UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_AbilityInputBlocked, "Gameplay.AbilityInputBlocked");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Gameplay_Invincible, "Gameplay.Invincible");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Damage_Forced, "Gameplay.Damage.Forced");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Resources_IgnoreCost, "Gameplay.Resources.IgnoreCost");
+#include "MobiusAbilitySystem/Utils/MAGameplayTags.h"
 
 
 UMobiusAbilitySystemComponent::UMobiusAbilitySystemComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-
 }
 
 void UMobiusAbilitySystemComponent::AbilityLocalInputPressed(int32 InputID)
@@ -39,6 +34,14 @@ void UMobiusAbilitySystemComponent::BeginPlay()
 	//Might move this to the character, makes the ASC more generic
 	AttributeSet = GetSet<UMACommonAttributeSet>();
 	AttributeSet->OnHealthChanged.AddDynamic(this, &ThisClass::OnAttributeSetHealthChanged);
+	
+	if (GetOwner()->HasAuthority())
+	{
+		for (int i = 0; i < StartingGrantedAbilities.Num(); ++i)
+		{
+			K2_GiveAbility(StartingGrantedAbilities[i].AbilityClass, 0, StartingGrantedAbilities[i].InputId);
+		}
+	}
 }
 
 void UMobiusAbilitySystemComponent::ProcessAbilityInput(const float DeltaTime, const bool bGamePaused)
@@ -82,7 +85,7 @@ void UMobiusAbilitySystemComponent::ClearAbilityInput()
 }
 
 FGameplayAbilitySpecHandle UMobiusAbilitySystemComponent::K2_GiveAbility(TSubclassOf<UGameplayAbility> AbilityClass,
-	int32 Level, int32 InputID, UObject* SourceObject)
+                                                                         int32 Level, int32 InputID, UObject* SourceObject)
 {
 	// build and validate the ability spec
 	FGameplayAbilitySpec AbilitySpec = BuildAbilitySpecFromClass(AbilityClass, Level, InputID);

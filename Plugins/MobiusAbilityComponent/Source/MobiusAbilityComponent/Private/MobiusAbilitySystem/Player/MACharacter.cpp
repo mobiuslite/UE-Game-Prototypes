@@ -17,9 +17,24 @@ AMACharacter::AMACharacter(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = true;
 }
 
-void AMACharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
-	const bool bIsDead)
+void AMACharacter::Client_KilledPlayer_Implementation(const APlayerState* KilledPlayerState)
 {
+}
+
+void AMACharacter::Client_OnDamageTaken_Implementation(const AController* DamageInstigator, const AActor* DamageCauser,
+                                                       const bool bIsDead)
+{
+}
+
+void AMACharacter::Server_OnPlayerDead(const FHitResult& Hit, const AController* DamageInstigator, const AActor* DamageCauser)
+{
+	if (DamageInstigator)
+	{
+		if (AMACharacter* CauserCharacter = Cast<AMACharacter>(DamageInstigator->GetPawn()))
+		{
+			CauserCharacter->Client_KilledPlayer(GetPlayerState());
+		}
+	}
 }
 
 void AMACharacter::BeginPlay()

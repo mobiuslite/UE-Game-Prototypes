@@ -8,11 +8,16 @@
 
 #include "MobiusAbilitySystemComponent.generated.h"
 
+USTRUCT(BlueprintType)
+struct FStartingAbilityInfo
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<UGameplayAbility> AbilityClass;
+	UPROPERTY(EditAnywhere)
+	int32 InputId = -1;
+};
 
-MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gameplay_AbilityInputBlocked);
-MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Gameplay_Invincible);
-MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Damage_Forced);
-MOBIUSABILITYCOMPONENT_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Resources_IgnoreCost);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), BlueprintType)
 class MOBIUSABILITYCOMPONENT_API UMobiusAbilitySystemComponent : public UAbilitySystemComponent
@@ -53,6 +58,9 @@ protected:
 	
 	UPROPERTY()
 	TSubclassOf<UGameplayEffect> SuicideGameplayEffectClass = USuicideGameplayEffect::StaticClass();
+	
+	UPROPERTY(EditDefaultsOnly)
+	TArray<FStartingAbilityInfo> StartingGrantedAbilities;
 	
 	UFUNCTION()
 	void OnAttributeSetHealthChanged(float EffectMagnitude, float OldValue, float NewValue);

@@ -7,9 +7,10 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
+#include "MobiusAbilitySystem/Utils/MAGameplayTags.h"
 
 FGameplayEffectSpecHandle UMAUtils::MakeHitDamageSpec(UAbilitySystemComponent* AbilityComponent,
-                                                      UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const FHitResult& HitResult, AActor* Causer)
+                                                      UGameplayAbility* SourceAbility, const TSubclassOf<UGameplayEffect> GameplayEffectClass, const float DamageAmount, const FHitResult& HitResult, AActor* Causer)
 {
 	if (!AbilityComponent || !SourceAbility) return FGameplayEffectSpecHandle();
 	if (!IsValid(GameplayEffectClass)) return FGameplayEffectSpecHandle();
@@ -34,7 +35,10 @@ FGameplayEffectSpecHandle UMAUtils::MakeHitDamageSpec(UAbilitySystemComponent* A
 		}
 	}
 	
-	return AbilityComponent->MakeOutgoingSpec(GameplayEffectClass, 1, Context);
+	FGameplayEffectSpecHandle Spec = AbilityComponent->MakeOutgoingSpec(GameplayEffectClass, 1, Context);
+	Spec.Data->SetSetByCallerMagnitude(TAG_Params_DamageAmount, DamageAmount);
+	
+	return Spec;
 }
 
 FGameplayEffectSpecHandle UMAUtils::MakeSpecSetByCaller(const TSubclassOf<UGameplayEffect> GameplayEffectClass,
@@ -49,9 +53,9 @@ FGameplayEffectSpecHandle UMAUtils::MakeSpecSetByCaller(const TSubclassOf<UGamep
 	return Spec;
 }
 
-bool UMAUtils::HasLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag)
+bool UMAUtils::HasLooseGameplayTagEX(const AActor* Actor, const FGameplayTag& GameplayTag)
 {
-	if (const UAbilitySystemComponent* AbilitySysComp = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor))
+	if (const UAbilitySystemComponent* AbilitySysComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Actor))
 	{
 		return AbilitySysComp->HasMatchingGameplayTag(GameplayTag);
 	}
@@ -59,8 +63,18 @@ bool UMAUtils::HasLooseGameplayTagEX(AActor* Actor, const FGameplayTag& Gameplay
 	return false;
 }
 
+int UMAUtils::GetLooseGameplayTagCountEX(const AActor* Actor, const FGameplayTag& GameplayTag)
+{
+	if (const UAbilitySystemComponent* AbilitySysComp = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Actor))
+	{
+		return AbilitySysComp->GetGameplayTagCount(GameplayTag);
+	}
+	
+	return 0;
+}
+
 bool UMAUtils::AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& GameplayTag, bool bAllowStacks,
-	bool bShouldReplicate)
+                                     bool bShouldReplicate, int Count)
 {
 	if (UAbilitySystemComponent* AbilitySysComp = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Actor))
 	{
@@ -69,7 +83,7 @@ bool UMAUtils::AddLooseGameplayTagEX(AActor* Actor, const FGameplayTag& Gameplay
 			return false;
 		}
 		
-		AbilitySysComp->AddLooseGameplayTag(GameplayTag, 1, bShouldReplicate ? EGameplayTagReplicationState::CountToOwner : EGameplayTagReplicationState::None);
+		AbilitySysComp->AddLooseGameplayTag(GameplayTag, Count, bShouldReplicate ? EGameplayTagReplicationState::CountToOwner : EGameplayTagReplicationState::None);
 		return true;
 	}
 

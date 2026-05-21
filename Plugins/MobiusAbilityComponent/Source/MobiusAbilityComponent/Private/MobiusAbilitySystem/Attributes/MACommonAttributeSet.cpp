@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerState.h"
 #include "MobiusAbilitySystem/MobiusAbilitySystemComponent.h"
 #include "MobiusAbilitySystem/Player/MACharacter.h"
+#include "MobiusAbilitySystem/Utils/MAGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
 void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
@@ -46,7 +47,7 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			SourceInstigator = PlayerState->GetPlayerController();
 		}
 		
-		const AActor* SourceCauser = Context.GetEffectCauser();
+		AActor* SourceCauser = Context.GetEffectCauser();
 		
 		float FinalDamage = BaseDamageDone;
 		if (const UPhysicalMaterial* PhysMat = HitResult.PhysMaterial.Get())
@@ -83,7 +84,7 @@ void UMACommonAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 			TargetActor->Client_OnDamageTaken(Instigator, SourceCauser, bIsDead);
 			if (bIsDead)
 			{
-				TargetActor->Server_OnPlayerDead(HitResult, SourceCauser);
+				TargetActor->Server_OnPlayerDead(HitResult, Instigator, SourceCauser);
 			}
 		}
 	}
